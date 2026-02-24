@@ -3,9 +3,9 @@ import uuid
 from typing import List
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
@@ -23,7 +23,7 @@ def _validate_audio_file(file: UploadFile) -> None:
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Filformat ej tillatet: {ext}. Tillatna: {', '.join(ALLOWED_EXTENSIONS)}"
+            detail=f"File format not allowed: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
 
@@ -43,8 +43,8 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
                 processor = IngestProcessor()
                 wav_bytes, audio_info = await processor.process(content, filename)
                 track.duration_sec = audio_info.get("duration_sec")
-                track.sample_rate = audio_info.get("sample_rate")
-                track.channels = audio_info.get("channels")
+                track.sample_rate  = audio_info.get("sample_rate")
+                track.channels     = audio_info.get("channels")
             except Exception as e:
                 log.warning("ingest_failed", error=str(e))
                 wav_bytes = content
@@ -67,6 +67,14 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
                 mfcc_stats=features.get("mfcc_stats"),
                 chroma_stats=features.get("chroma_stats"),
                 feature_vector=features.get("feature_vector"),
+                extra_features={
+                    k: v for k, v in features.items()
+                    if k not in {
+                        "bpm", "key", "scale", "energy", "loudness_lufs", "danceability",
+                        "spectral_centroid_mean", "spectral_rolloff_mean", "zero_crossing_rate_mean",
+                        "mfcc_stats", "chroma_stats", "feature_vector",
+                    }
+                },
             )
             db.add(af)
 
@@ -100,14 +108,10 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
 
 
 async def _get_track_with_relations(db: AsyncSession, track_id: uuid.UUID):
-    """Hamta track med alla relationer inladdade."""
     result = await db.execute(
         select(Track)
         .where(Track.id == track_id)
-        .options(
-            selectinload(Track.features),
-            selectinload(Track.classification),
-        )
+        .options(selectinload(Track.features), selectinload(Track.classification))
     )
     return result.scalar_one_or_none()
 
@@ -116,21 +120,36 @@ async def _get_track_with_relations(db: AsyncSession, track_id: uuid.UUID):
 async def upload_track(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    force: bool = Query(False, description="Force re-analysis even if file already exists"),
     db: AsyncSession = Depends(get_db),
 ):
     _validate_audio_file(file)
     content = await file.read()
     file_hash = hashlib.sha256(content).hexdigest()
 
-    existing = await db.scalar(
-        select(Track).where(Track.file_hash == file_hash)
-    )
-    if existing:
+    existing = await db.scalar(select(Track).where(Track.file_hash == file_hash))
+
+    if existing and not force:
         return TrackUploadResponse(
             track_id=existing.id,
             job_id=str(existing.id),
             status=existing.status,
-            message="Filen ar redan uppladdad."
+            message="File already exists. Use force=true to re-analyze.",
+        )
+
+    if existing and force:
+        # Delete old analysis data and re-run
+        await db.execute(delete(AudioFeatures).where(AudioFeatures.track_id == existing.id))
+        await db.execute(delete(Classification).where(Classification.track_id == existing.id))
+        existing.status = "processing"
+        existing.analyzed_at = None
+        await db.commit()
+        background_tasks.add_task(_run_analysis, existing.id, content, file.filename or "audio.wav")
+        return TrackUploadResponse(
+            track_id=existing.id,
+            job_id=str(existing.id),
+            status="processing",
+            message="Re-analysis started.",
         )
 
     track_id = uuid.uuid4()
@@ -152,7 +171,7 @@ async def upload_track(
         track_id=track_id,
         job_id=str(track_id),
         status="processing",
-        message="Uppladdad! Analys pagar...",
+        message="Uploaded — analysis in progress.",
     )
 
 
@@ -160,7 +179,7 @@ async def upload_track(
 async def get_track(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     track = await _get_track_with_relations(db, track_id)
     if not track:
-        raise HTTPException(status_code=404, detail="Track hittades inte")
+        raise HTTPException(status_code=404, detail="Track not found")
     return track
 
 
@@ -168,17 +187,13 @@ async def get_track(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 async def list_tracks(skip: int = 0, limit: int = 20, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Track)
-        .offset(skip)
-        .limit(limit)
+        .offset(skip).limit(limit)
         .order_by(Track.uploaded_at.desc())
-        .options(
-            selectinload(Track.features),
-            selectinload(Track.classification),
-        )
+        .options(selectinload(Track.features), selectinload(Track.classification))
     )
     return result.scalars().all()
 
 
 @router.get("/{track_id}/similar", response_model=List[SimilarTrackResponse])
 async def get_similar_tracks(track_id: uuid.UUID, limit: int = 10, db: AsyncSession = Depends(get_db)):
-    raise HTTPException(status_code=501, detail="Implementeras i Fas 3.")
+    raise HTTPException(status_code=501, detail="Coming in Phase 3.")

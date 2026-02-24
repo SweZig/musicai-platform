@@ -305,6 +305,16 @@ input[type=url]:focus { border-color: var(--amber); }
 .bar-fill  { height: 100%; border-radius: 1px; transition: width 0.9s cubic-bezier(0.25,1,0.5,1); }
 .bar-val   { font-family: var(--mono); font-size: 0.5rem; color: var(--text-dim); width: 28px; text-align: right; flex-shrink: 0; }
 
+.btn-reanalyze {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: transparent; border: 1px solid var(--border2);
+  color: var(--text-dim); font-family: var(--mono); font-size: 0.55rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 0.35rem 0.75rem; border-radius: 2px; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-reanalyze:hover { border-color: var(--amber); color: var(--amber); }
+
 /* ── Chord list ── */
 .chord-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .chord-pill {
@@ -550,6 +560,8 @@ input[type=url]:focus { border-color: var(--amber); }
 
 <script>
 let tracks = [];
+let currentTrackId = null;
+let currentTrackFile = null;
 let animFrame = null;
 let pollInterval = null;
 const BAR_COLORS = ['#f5a623','#5b8def','#4caf6e','#c86bff','#e05555','#50c8c8'];
@@ -663,6 +675,8 @@ function pollJob(trackId, jobId, filename) {
 
 // ── Render result ──────────────────────────────────────────────────────────
 function renderResult(track) {
+  currentTrackId = track.id;
+  document.getElementById('reanalyzeBtn').style.display = 'inline-flex';
   const f = track.features || {};
   const c = track.classification || {};
 
@@ -805,6 +819,34 @@ function toast(msg, type='success') {
   const el = document.getElementById('toast');
   el.textContent = msg; el.className = 'show ' + type;
   setTimeout(() => el.className = '', 3500);
+}
+
+// ── Re-analyze ────────────────────────────────────────────────────────────
+function reanalyzeCurrentTrack() {
+  if (!currentTrackId) return;
+  // Create hidden file input and trigger it
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.wav,.mp3,.aiff,.aif,.flac,.ogg';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setProgress(true, file.name, 5, 'Re-uploading for analysis...');
+    drawOsc(true);
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const res = await fetch(apiBase() + '/api/v1/tracks/upload?force=true', { method:'POST', body:fd });
+      if (!res.ok) { const err = await res.json().catch(()=>{}); throw new Error(err.detail || 'HTTP ' + res.status); }
+      const data = await res.json();
+      toast('Re-analysis started...', 'success');
+      setProgress(true, file.name, 20, 'Re-analyzing...');
+      pollJob(data.track_id, data.job_id, file.name);
+    } catch(e) {
+      toast('Re-analyze failed: ' + e.message, 'error');
+      setProgress(false); drawOsc(false);
+    }
+  };
+  input.click();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
