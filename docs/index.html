@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,472 +8,124 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:       #0a0a0f;
-    --surface:  #111118;
-    --border:   #1e1e2e;
-    --accent:   #7fffb2;
-    --accent2:  #ff6b6b;
-    --accent3:  #6b9fff;
-    --text:     #e8e8f0;
-    --muted:    #555570;
-    --mono:     'Space Mono', monospace;
-    --sans:     'Syne', sans-serif;
+    --bg:      #0a0a0f;
+    --surface: #111118;
+    --border:  #1e1e2e;
+    --accent:  #7fffb2;
+    --accent2: #ff6b6b;
+    --accent3: #6b9fff;
+    --text:    #e8e8f0;
+    --muted:   #555570;
+    --mono:    'Space Mono', monospace;
+    --sans:    'Syne', sans-serif;
   }
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* ── Bakgrundsraster ── */
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
   body::before {
     content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(127,255,178,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(127,255,178,0.03) 1px, transparent 1px);
+    position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(127,255,178,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(127,255,178,0.03) 1px, transparent 1px);
     background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
+    pointer-events: none; z-index: 0;
   }
-
-  /* ── Header ── */
   header {
-    position: relative;
-    z-index: 10;
+    position: relative; z-index: 10;
     padding: 2rem 3rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between;
     border-bottom: 1px solid var(--border);
   }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
+  .logo { display: flex; align-items: center; gap: 0.75rem; }
   .logo-mark {
-    width: 36px;
-    height: 36px;
-    border: 2px solid var(--accent);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
     animation: pulse-ring 3s ease-in-out infinite;
   }
-
   @keyframes pulse-ring {
     0%, 100% { box-shadow: 0 0 0 0 rgba(127,255,178,0.4); }
     50%       { box-shadow: 0 0 0 8px rgba(127,255,178,0); }
   }
-
   .logo-mark svg { width: 18px; height: 18px; fill: var(--accent); }
-
-  .logo-text {
-    font-size: 1.1rem;
-    font-weight: 800;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--text);
-  }
-
+  .logo-text { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; }
   .logo-text span { color: var(--accent); }
-
-  .api-status {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: background 0.3s;
-  }
-  .status-dot.online { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: blink 2s infinite; }
+  .api-status { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); display: flex; align-items: center; gap: 0.5rem; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+  .status-dot.online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: blink 2s infinite; }
   .status-dot.offline { background: var(--accent2); }
-
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-  /* ── Main layout ── */
   main {
-    position: relative;
-    z-index: 1;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 3rem 2rem;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2rem;
+    position: relative; z-index: 1;
+    max-width: 1100px; margin: 0 auto; padding: 3rem 2rem;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
   }
-
-  @media (max-width: 768px) {
-    main { grid-template-columns: 1fr; padding: 1.5rem 1rem; }
-    header { padding: 1.5rem; }
-  }
-
-  /* ── Panels ── */
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .panel-header {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .panel-label {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--accent);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-  }
-
-  .panel-number {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    margin-left: auto;
-  }
-
+  @media (max-width: 768px) { main { grid-template-columns: 1fr; padding: 1.5rem 1rem; } header { padding: 1.5rem; } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .panel-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem; }
+  .panel-label { font-family: var(--mono); font-size: 0.65rem; color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase; }
+  .panel-number { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-left: auto; }
   .panel-body { padding: 1.5rem; }
-
-  /* ── Upload zone ── */
   .upload-zone {
-    border: 1.5px dashed var(--border);
-    border-radius: 4px;
-    padding: 3rem 2rem;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-    background: rgba(127,255,178,0.01);
+    border: 1.5px dashed var(--border); border-radius: 4px; padding: 3rem 2rem;
+    text-align: center; cursor: pointer; transition: all 0.2s;
+    position: relative; background: rgba(127,255,178,0.01);
   }
-
-  .upload-zone:hover,
-  .upload-zone.dragover {
-    border-color: var(--accent);
-    background: rgba(127,255,178,0.05);
-  }
-
-  .upload-zone input[type=file] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    width: 100%;
-    height: 100%;
-  }
-
-  .upload-icon {
-    margin: 0 auto 1rem;
-    width: 48px;
-    height: 48px;
-    opacity: 0.5;
-  }
-
-  .upload-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 0.4rem;
-  }
-
-  .upload-sub {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-  }
-
-  /* ── Progress ── */
-  .progress-wrap {
-    margin-top: 1.5rem;
-    display: none;
-  }
-
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(127,255,178,0.05); }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { margin: 0 auto 1rem; width: 48px; height: 48px; opacity: 0.5; }
+  .upload-title { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 0.4rem; }
+  .upload-sub { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); letter-spacing: 0.1em; }
+  .progress-wrap { margin-top: 1.5rem; display: none; }
   .progress-wrap.visible { display: block; }
-
-  .progress-labels {
-    display: flex;
-    justify-content: space-between;
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    margin-bottom: 0.5rem;
-  }
-
-  .progress-bar-bg {
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .progress-bar-fill {
-    height: 100%;
-    background: var(--accent);
-    width: 0%;
-    transition: width 0.4s ease;
-    box-shadow: 0 0 8px var(--accent);
-  }
-
-  .progress-step {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--accent);
-    margin-top: 0.5rem;
-    min-height: 1rem;
-  }
-
-  /* ── API URL input ── */
-  .input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    margin-bottom: 1.2rem;
-  }
-
-  .input-label {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
+  .progress-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .progress-bar-bg { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.4s ease; box-shadow: 0 0 8px var(--accent); }
+  .progress-step { font-family: var(--mono); font-size: 0.65rem; color: var(--accent); margin-top: 0.5rem; min-height: 1rem; }
+  .input-group { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.2rem; }
+  .input-label { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
   input[type=text], input[type=url] {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    padding: 0.6rem 0.8rem;
-    border-radius: 3px;
-    outline: none;
-    transition: border-color 0.2s;
-    width: 100%;
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: 0.75rem; padding: 0.6rem 0.8rem;
+    border-radius: 3px; outline: none; transition: border-color 0.2s; width: 100%;
   }
-
-  input[type=text]:focus, input[type=url]:focus {
-    border-color: var(--accent);
-  }
-
-  /* ── Canvas visualizer ── */
-  canvas {
-    width: 100%;
-    height: 80px;
-    display: block;
-    border-radius: 3px;
-    background: var(--bg);
-  }
-
-  /* ── Results ── */
-  .result-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-
-  .result-card {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0.8rem 1rem;
-  }
-
-  .result-card-label {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    color: var(--muted);
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    margin-bottom: 0.3rem;
-  }
-
-  .result-card-value {
-    font-family: var(--mono);
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--accent);
-  }
-
+  input[type=text]:focus, input[type=url]:focus { border-color: var(--accent); }
+  canvas { width: 100%; height: 80px; display: block; border-radius: 3px; background: var(--bg); }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
+  .result-card { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0.8rem 1rem; }
+  .result-card-label { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.3rem; }
+  .result-card-value { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; color: var(--accent); }
   .result-card-value.secondary { color: var(--accent3); }
   .result-card-value.tertiary  { color: var(--text); font-size: 0.9rem; }
-
-  /* ── Genre badge ── */
   .genre-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: rgba(127,255,178,0.1);
-    border: 1px solid rgba(127,255,178,0.3);
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    padding: 0.4rem 0.9rem;
-    border-radius: 2px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 1rem;
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: rgba(127,255,178,0.1); border: 1px solid rgba(127,255,178,0.3);
+    color: var(--accent); font-family: var(--mono); font-size: 0.75rem;
+    padding: 0.4rem 0.9rem; border-radius: 2px; letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 1rem;
   }
-
-  /* ── Confidence bars ── */
-  .conf-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .conf-label {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    width: 90px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .conf-bar-bg {
-    flex: 1;
-    height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .conf-bar-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
-  }
-
-  .conf-pct {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    color: var(--muted);
-    width: 30px;
-    text-align: right;
-  }
-
-  /* ── Track list ── */
+  .conf-item { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+  .conf-label { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); width: 90px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .conf-bar-bg { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .conf-bar-fill { height: 100%; border-radius: 2px; transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1); }
+  .conf-pct { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); width: 30px; text-align: right; }
   .track-list { display: flex; flex-direction: column; gap: 0.5rem; }
-
   .track-item {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    transition: border-color 0.2s;
-    cursor: pointer;
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.75rem 1rem; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 3px;
+    transition: border-color 0.2s; cursor: pointer;
   }
-
   .track-item:hover { border-color: var(--muted); }
-
   .track-item.active { border-color: var(--accent); }
-
-  .track-status {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .track-name {
-    font-size: 0.8rem;
-    font-weight: 600;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .track-meta {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    color: var(--muted);
-  }
-
-  .track-genre {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    color: var(--accent);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
-  /* ── Empty state ── */
-  .empty {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: var(--muted);
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
-  }
-
-  /* ── Span full width ── */
-  .full-width { grid-column: 1 / -1; }
-
-  /* ── Oscilloscope canvas ── */
-  #oscilloscope {
-    height: 60px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    margin-bottom: 1rem;
-    width: 100%;
-    display: block;
-  }
-
-  /* ── Toast ── */
-  #toast {
-    position: fixed;
-    bottom: 2rem;
-    right: 2rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 0.8rem 1.2rem;
-    border-radius: 3px;
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    z-index: 100;
-    transform: translateY(100px);
-    opacity: 0;
-    transition: all 0.3s;
-  }
-
-  #toast.show { transform: translateY(0); opacity: 1; }
+  .track-status { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .track-name { font-size: 0.8rem; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track-meta { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); }
+  .track-genre { font-family: var(--mono); font-size: 0.6rem; color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase; }
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; }
+  #oscilloscope { height: 60px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; margin-bottom: 1rem; width: 100%; display: block; }
+  #toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--surface); border: 1px solid var(--border); padding: 0.8rem 1.2rem; border-radius: 3px; font-family: var(--mono); font-size: 0.7rem; z-index: 100; transform: translateY(100px); opacity: 0; transition: all 0.3s; }
+  #toast.show    { transform: translateY(0); opacity: 1; }
   #toast.success { border-color: var(--accent); color: var(--accent); }
   #toast.error   { border-color: var(--accent2); color: var(--accent2); }
-
-  /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -490,67 +142,48 @@
   </div>
   <div class="api-status">
     <div class="status-dot" id="statusDot"></div>
-    <span id="statusText">Ansluter...</span>
+    <span id="statusText">Connecting...</span>
   </div>
 </header>
 
 <main>
-
-  <!-- ── Vänster kolumn ── -->
   <div style="display:flex;flex-direction:column;gap:2rem;">
 
-    <!-- Konfiguration -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-label">Konfiguration</span>
+        <span class="panel-label">Configuration</span>
         <span class="panel-number">01</span>
       </div>
       <div class="panel-body">
         <div class="input-group">
           <label class="input-label">API URL</label>
-          <input type="url" id="apiUrl" value="https://your-api.railway.app" placeholder="https://din-app.railway.app">
+          <input type="url" id="apiUrl" value="https://musicai-platform-production.up.railway.app" placeholder="https://your-app.railway.app">
         </div>
-        <button onclick="checkHealth()" style="
-          background: transparent;
-          border: 1px solid var(--accent);
-          color: var(--accent);
-          font-family: var(--mono);
-          font-size: 0.7rem;
-          padding: 0.5rem 1rem;
-          border-radius: 3px;
-          cursor: pointer;
-          letter-spacing: 0.1em;
-          transition: background 0.2s;
-          width: 100%;
-        " onmouseover="this.style.background='rgba(127,255,178,0.1)'"
-           onmouseout="this.style.background='transparent'">
-          TESTA ANSLUTNING
+        <button onclick="checkHealth()" style="background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:var(--mono);font-size:0.7rem;padding:0.5rem 1rem;border-radius:3px;cursor:pointer;letter-spacing:0.1em;transition:background 0.2s;width:100%;"
+          onmouseover="this.style.background='rgba(127,255,178,0.1)'"
+          onmouseout="this.style.background='transparent'">
+          TEST CONNECTION
         </button>
       </div>
     </div>
 
-    <!-- Upload -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-label">Ladda upp</span>
+        <span class="panel-label">Upload</span>
         <span class="panel-number">02</span>
       </div>
       <div class="panel-body">
-
-        <!-- Visualizer -->
         <canvas id="oscilloscope"></canvas>
-
         <div class="upload-zone" id="dropZone">
           <input type="file" id="fileInput" accept=".wav,.mp3,.aiff,.aif,.flac,.ogg" onchange="handleFile(event)">
           <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M24 8v24M16 16l8-8 8 8" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M8 36h32" stroke-linecap="round"/>
           </svg>
-          <div class="upload-title">Dra hit eller klicka för att välja</div>
+          <div class="upload-title">Drag here or click to select</div>
           <div class="upload-sub" style="margin-top:0.5rem">WAV · MP3 · AIFF · FLAC · OGG</div>
-          <div class="upload-sub" style="margin-top:0.4rem;color:var(--muted)">Max storlek: WAV/AIFF 500 MB · MP3/OGG 100 MB · FLAC 300 MB</div>
+          <div class="upload-sub" style="margin-top:0.4rem;color:var(--muted)">Max size: WAV/AIFF 500 MB · MP3/OGG 100 MB · FLAC 300 MB</div>
         </div>
-
         <div class="progress-wrap" id="progressWrap">
           <div class="progress-labels">
             <span id="progressFile">—</span>
@@ -559,55 +192,47 @@
           <div class="progress-bar-bg">
             <div class="progress-bar-fill" id="progressFill"></div>
           </div>
-          <div class="progress-step" id="progressStep">Initierar...</div>
+          <div class="progress-step" id="progressStep">Initializing...</div>
         </div>
-
       </div>
     </div>
 
   </div>
 
-  <!-- ── Höger kolumn ── -->
   <div style="display:flex;flex-direction:column;gap:2rem;">
 
-    <!-- Analysresultat -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-label">Analysresultat</span>
+        <span class="panel-label">Analysis Results</span>
         <span class="panel-number">03</span>
       </div>
       <div class="panel-body" id="resultsPanel">
-        <div class="empty">— Ingen fil analyserad ännu —</div>
+        <div class="empty">— No file analyzed yet —</div>
       </div>
     </div>
 
-    <!-- Tracks -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-label">Uppladdade tracks</span>
+        <span class="panel-label">Uploaded Tracks</span>
         <span class="panel-number">04</span>
       </div>
       <div class="panel-body">
         <div class="track-list" id="trackList">
-          <div class="empty">— Inga tracks ännu —</div>
+          <div class="empty">— No tracks yet —</div>
         </div>
       </div>
     </div>
 
   </div>
-
 </main>
 
 <div id="toast"></div>
 
 <script>
-// ── State ─────────────────────────────────────────────────────────────────
 let tracks = [];
-let currentJobId = null;
-let pollInterval = null;
 let animFrame = null;
+let pollInterval = null;
 
-// ── API helpers ───────────────────────────────────────────────────────────
 function apiUrl() {
   return document.getElementById('apiUrl').value.replace(/\/$/, '');
 }
@@ -616,45 +241,40 @@ async function apiFetch(path, opts = {}) {
   const res = await fetch(apiUrl() + path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+    throw new Error(err.detail || 'HTTP ' + res.status);
   }
   return res.json();
 }
 
-// ── Health check ──────────────────────────────────────────────────────────
 async function checkHealth() {
   const dot  = document.getElementById('statusDot');
   const text = document.getElementById('statusText');
-  dot.className  = 'status-dot';
-  text.textContent = 'Ansluter...';
+  dot.className = 'status-dot';
+  text.textContent = 'Connecting...';
   try {
     const data = await apiFetch('/health');
-    dot.className  = 'status-dot online';
-    text.textContent = `Online · v${data.version}`;
-    toast(`Ansluten till API (${data.env})`, 'success');
+    dot.className = 'status-dot online';
+    text.textContent = 'Online · v' + (data.version || '1.0.0');
+    toast('Connected to API (' + (data.env || 'production') + ')', 'success');
     loadTracks();
   } catch(e) {
-    dot.className  = 'status-dot offline';
+    dot.className = 'status-dot offline';
     text.textContent = 'Offline';
-    toast('Kan inte nå API: ' + e.message, 'error');
+    toast('Cannot reach API: ' + e.message, 'error');
   }
 }
 
-// ── Oscilloscope ──────────────────────────────────────────────────────────
 function drawIdle() {
   const canvas = document.getElementById('oscilloscope');
   const ctx = canvas.getContext('2d');
-  canvas.width  = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
+  canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
-  ctx.strokeStyle = 'rgba(127,255,178,0.3)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(127,255,178,0.3)'; ctx.lineWidth = 1;
   ctx.beginPath();
   const t = Date.now() / 1000;
   for (let x = 0; x < W; x++) {
-    const y = H/2 + Math.sin((x / W) * Math.PI * 6 + t * 1.5) * 6
-                   + Math.sin((x / W) * Math.PI * 14 + t * 2.3) * 3;
+    const y = H/2 + Math.sin((x/W)*Math.PI*6 + t*1.5)*6 + Math.sin((x/W)*Math.PI*14 + t*2.3)*3;
     x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.stroke();
@@ -665,20 +285,16 @@ function drawAnalyzing() {
   cancelAnimationFrame(animFrame);
   const canvas = document.getElementById('oscilloscope');
   const ctx = canvas.getContext('2d');
-  canvas.width  = canvas.offsetWidth;
-  canvas.height = canvas.offsetHeight;
+  canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
   const W = canvas.width, H = canvas.height;
   function frame() {
     ctx.clearRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(127,255,178,0.7)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(127,255,178,0.7)'; ctx.lineWidth = 1.5;
     ctx.beginPath();
     const t = Date.now() / 1000;
     for (let x = 0; x < W; x++) {
       const noise = (Math.random() - 0.5) * 10;
-      const y = H/2 + Math.sin((x / W) * Math.PI * 12 + t * 4) * 15
-                     + Math.sin((x / W) * Math.PI * 30 + t * 7) * 8
-                     + noise;
+      const y = H/2 + Math.sin((x/W)*Math.PI*12 + t*4)*15 + Math.sin((x/W)*Math.PI*30 + t*7)*8 + noise;
       x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.stroke();
@@ -687,13 +303,11 @@ function drawAnalyzing() {
   frame();
 }
 
-// ── Drag and drop ─────────────────────────────────────────────────────────
 const dropZone = document.getElementById('dropZone');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('dragover');
+  e.preventDefault(); dropZone.classList.remove('dragover');
   const file = e.dataTransfer.files[0];
   if (file) uploadFile(file);
 });
@@ -703,9 +317,8 @@ function handleFile(e) {
   if (file) uploadFile(file);
 }
 
-// ── Upload ────────────────────────────────────────────────────────────────
 async function uploadFile(file) {
-  setProgress(true, file.name, 5, 'Laddar upp...');
+  setProgress(true, file.name, 5, 'Uploading...');
   drawAnalyzing();
 
   const formData = new FormData();
@@ -713,58 +326,42 @@ async function uploadFile(file) {
 
   let data;
   try {
-    data = await fetch(apiUrl() + '/api/v1/tracks/upload', {
-      method: 'POST',
-      body: formData
-    });
-    if (!data.ok) {
-      const err = await data.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${data.status}`);
+    const res = await fetch(apiUrl() + '/api/v1/tracks/upload', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
     }
-    data = await data.json();
+    data = await res.json();
   } catch(e) {
-    toast('Uppladdning misslyckades: ' + e.message, 'error');
-    setProgress(false);
-    drawIdle();
-    return;
+    toast('Upload failed: ' + e.message, 'error');
+    setProgress(false); drawIdle(); return;
   }
 
-  toast(`Uppladdad! Analys pågår...`, 'success');
-  setProgress(true, file.name, 20, 'Analys påbörjad...');
-
-  if (data.status === 'already_exists') {
-    setProgress(true, file.name, 100, 'Filen finns redan!');
-    showResult({ track_id: data.track_id });
-    setTimeout(() => { setProgress(false); drawIdle(); }, 2000);
-    return;
-  }
-
-  currentJobId = data.job_id;
+  toast('Uploaded! Analyzing...', 'success');
+  setProgress(true, file.name, 20, 'Analysis started...');
   pollJobStatus(data.track_id, data.job_id, file.name);
 }
 
-// ── Poll job status ───────────────────────────────────────────────────────
 function pollJobStatus(trackId, jobId, filename) {
   clearInterval(pollInterval);
   const steps = {
-    pending:    [10, 'Väntar i kö...'],
-    started:    [20, 'Startar pipeline...'],
-    progress:   [50, 'Extraherar features...'],
-    success:    [100, 'Analys klar! ✓'],
-    failure:    [0,  'Fel uppstod'],
+    pending:  [10, 'Waiting in queue...'],
+    started:  [20, 'Starting pipeline...'],
+    progress: [50, 'Extracting features...'],
+    success:  [100, 'Analysis complete! ✓'],
+    failure:  [0, 'Error occurred'],
   };
 
   pollInterval = setInterval(async () => {
     try {
-      const job = await apiFetch(`/api/v1/jobs/${jobId}`);
-      const [pct, label] = steps[job.status] || [30, 'Bearbetar...'];
-      const actualPct = job.progress || pct;
-      setProgress(true, filename, actualPct, label);
+      const job = await apiFetch('/api/v1/jobs/' + jobId);
+      const [pct, label] = steps[job.status] || [30, 'Processing...'];
+      setProgress(true, filename, job.progress || pct, label);
 
       if (job.status === 'success') {
         clearInterval(pollInterval);
         setTimeout(async () => {
-          const track = await apiFetch(`/api/v1/tracks/${trackId}`);
+          const track = await apiFetch('/api/v1/tracks/' + trackId);
           showResult(track);
           loadTracks();
           drawIdle();
@@ -772,116 +369,74 @@ function pollJobStatus(trackId, jobId, filename) {
         }, 500);
       } else if (job.status === 'failure') {
         clearInterval(pollInterval);
-        toast('Analysen misslyckades: ' + (job.error || 'Okänt fel'), 'error');
-        setProgress(false);
-        drawIdle();
+        toast('Analysis failed: ' + (job.error || 'Unknown error'), 'error');
+        setProgress(false); drawIdle();
       }
-    } catch(e) {
-      // Ignorera tillfälliga nätverksfel
-    }
+    } catch(e) { /* ignore transient errors */ }
   }, 1500);
 }
 
-// ── Show result ───────────────────────────────────────────────────────────
 function showResult(track) {
   const panel = document.getElementById('resultsPanel');
   const f = track.features || {};
   const c = track.classification || {};
 
-  const genre    = c.genre    || '—';
-  const bpm      = f.bpm      ? f.bpm.toFixed(1) : '—';
-  const key      = f.key      ? `${f.key} ${f.scale || ''}`.trim() : '—';
-  const energy   = f.energy   ? (f.energy * 100).toFixed(1) + '%' : '—';
-  const dance    = f.danceability ? (f.danceability * 100).toFixed(0) + '%' : '—';
-  const conf     = c.confidence ? (c.confidence * 100).toFixed(0) + '%' : '—';
+  const genre  = c.genre   || '—';
+  const bpm    = f.bpm     ? f.bpm.toFixed(1) : '—';
+  const key    = f.key     ? (f.key + ' ' + (f.scale || '')).trim() : '—';
+  const energy = f.energy  ? (f.energy * 100).toFixed(1) + '%' : '—';
+  const dance  = f.danceability ? (f.danceability * 100).toFixed(0) + '%' : '—';
 
-  const scores   = c.genre_scores || {};
-  const sortedGenres = Object.entries(scores)
-    .sort((a,b) => b[1] - a[1])
-    .slice(0, 6);
-
+  const scores = c.genre_scores || {};
+  const sortedGenres = Object.entries(scores).sort((a,b) => b[1]-a[1]).slice(0, 6);
   const barColors = ['#7fffb2','#6b9fff','#ff6b6b','#ffd06b','#c86bff','#ff9b6b'];
 
   panel.innerHTML = `
-    <div class="genre-badge">
-      <span>♪</span> ${genre.toUpperCase()}
-      ${c.subgenre ? `<span style="opacity:0.6">/ ${c.subgenre}</span>` : ''}
-    </div>
-
+    <div class="genre-badge"><span>♪</span> ${genre.toUpperCase()}${c.subgenre ? ' <span style="opacity:0.6">/ ' + c.subgenre + '</span>' : ''}</div>
     <div class="result-grid">
-      <div class="result-card">
-        <div class="result-card-label">BPM</div>
-        <div class="result-card-value">${bpm}</div>
-      </div>
-      <div class="result-card">
-        <div class="result-card-label">Tonart</div>
-        <div class="result-card-value secondary">${key}</div>
-      </div>
-      <div class="result-card">
-        <div class="result-card-label">Energi</div>
-        <div class="result-card-value tertiary">${energy}</div>
-      </div>
-      <div class="result-card">
-        <div class="result-card-label">Dansbarhet</div>
-        <div class="result-card-value tertiary">${dance}</div>
-      </div>
+      <div class="result-card"><div class="result-card-label">BPM</div><div class="result-card-value">${bpm}</div></div>
+      <div class="result-card"><div class="result-card-label">Key</div><div class="result-card-value secondary">${key}</div></div>
+      <div class="result-card"><div class="result-card-label">Energy</div><div class="result-card-value tertiary">${energy}</div></div>
+      <div class="result-card"><div class="result-card-label">Danceability</div><div class="result-card-value tertiary">${dance}</div></div>
     </div>
-
     ${sortedGenres.length ? `
       <div style="margin-bottom:0.5rem">
-        <div class="result-card-label" style="margin-bottom:0.75rem">Genre-fördelning</div>
+        <div class="result-card-label" style="margin-bottom:0.75rem">Genre distribution</div>
         ${sortedGenres.map(([g, s], i) => `
           <div class="conf-item">
             <span class="conf-label">${g}</span>
-            <div class="conf-bar-bg">
-              <div class="conf-bar-fill" style="width:${(s*100).toFixed(1)}%;background:${barColors[i]}"></div>
-            </div>
+            <div class="conf-bar-bg"><div class="conf-bar-fill" style="width:${(s*100).toFixed(1)}%;background:${barColors[i]}"></div></div>
             <span class="conf-pct">${(s*100).toFixed(0)}%</span>
           </div>
         `).join('')}
       </div>
     ` : ''}
-
     <div style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);margin-top:0.75rem;">
       TRACK ID: ${track.id || '—'}<br>
-      ${track.duration_sec ? `LÄNGD: ${track.duration_sec.toFixed(1)}s · ` : ''}
-      ${track.sample_rate  ? `${track.sample_rate/1000}kHz` : ''}
+      ${track.duration_sec ? 'DURATION: ' + track.duration_sec.toFixed(1) + 's · ' : ''}
+      ${track.sample_rate  ? (track.sample_rate/1000) + 'kHz' : ''}
     </div>
   `;
 }
 
-// ── Load tracks ───────────────────────────────────────────────────────────
 async function loadTracks() {
   try {
-    const data = await apiFetch('/api/v1/tracks/');
-    tracks = data;
+    tracks = await apiFetch('/api/v1/tracks/');
     renderTrackList();
-  } catch(e) {
-    // Tyst fail — API kanske inte är redo
-  }
+  } catch(e) { /* silent fail */ }
 }
 
 function renderTrackList() {
   const list = document.getElementById('trackList');
-  if (!tracks.length) {
-    list.innerHTML = '<div class="empty">— Inga tracks ännu —</div>';
-    return;
-  }
-
-  const statusColors = {
-    uploaded:   'var(--muted)',
-    processing: 'var(--accent3)',
-    analyzed:   'var(--accent)',
-    error:      'var(--accent2)',
-  };
-
+  if (!tracks.length) { list.innerHTML = '<div class="empty">— No tracks yet —</div>'; return; }
+  const statusColors = { uploaded: 'var(--muted)', processing: 'var(--accent3)', analyzed: 'var(--accent)', error: 'var(--accent2)' };
   list.innerHTML = tracks.map(t => `
     <div class="track-item" onclick="selectTrack(event, '${t.id}')">
       <div class="track-status" style="background:${statusColors[t.status] || 'var(--muted)'}"></div>
       <div class="track-name">${t.title || t.original_filename}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
-        ${t.classification?.genre ? `<div class="track-genre">${t.classification.genre}</div>` : ''}
-        ${t.features?.bpm ? `<div class="track-meta">${t.features.bpm.toFixed(0)} BPM</div>` : ''}
+        ${t.classification && t.classification.genre ? '<div class="track-genre">' + t.classification.genre + '</div>' : ''}
+        ${t.features && t.features.bpm ? '<div class="track-meta">' + t.features.bpm.toFixed(0) + ' BPM</div>' : ''}
         <div class="track-meta">${t.status}</div>
       </div>
     </div>
@@ -890,16 +445,16 @@ function renderTrackList() {
 
 async function selectTrack(evt, id) {
   try {
-    const track = await apiFetch(`/api/v1/tracks/${id}`);
+    const track = await apiFetch('/api/v1/tracks/' + id);
     showResult(track);
     document.querySelectorAll('.track-item').forEach(el => el.classList.remove('active'));
     evt.currentTarget.classList.add('active');
   } catch(e) {
-    toast('Error: ' + e.message, 'error'); console.error('selectTrack error', e);
+    console.error('selectTrack error:', e);
+    toast('Error: ' + e.message, 'error');
   }
 }
 
-// ── Progress helpers ──────────────────────────────────────────────────────
 function setProgress(visible, filename = '', pct = 0, step = '') {
   const wrap = document.getElementById('progressWrap');
   wrap.className = 'progress-wrap' + (visible ? ' visible' : '');
@@ -909,15 +464,13 @@ function setProgress(visible, filename = '', pct = 0, step = '') {
   document.getElementById('progressStep').textContent  = step;
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────
 function toast(msg, type = 'success') {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = `show ${type}`;
+  el.className = 'show ' + type;
   setTimeout(() => el.className = '', 3500);
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────
 drawIdle();
 checkHealth();
 </script>
