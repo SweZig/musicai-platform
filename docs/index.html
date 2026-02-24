@@ -876,7 +876,7 @@ function renderTrackList() {
   };
 
   list.innerHTML = tracks.map(t => `
-    <div class="track-item" onclick="selectTrack('${t.id}')">
+    <div class="track-item" onclick="selectTrack(event, '${t.id}')">
       <div class="track-status" style="background:${statusColors[t.status] || 'var(--muted)'}"></div>
       <div class="track-name">${t.title || t.original_filename}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
@@ -888,12 +888,12 @@ function renderTrackList() {
   `).join('');
 }
 
-async function selectTrack(id) {
+async function selectTrack(evt, id) {
   try {
     const track = await apiFetch(`/api/v1/tracks/${id}`);
     showResult(track);
     document.querySelectorAll('.track-item').forEach(el => el.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    evt.currentTarget.classList.add('active');
   } catch(e) {
     toast('Kunde inte hämta track', 'error');
   }
