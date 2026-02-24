@@ -508,7 +508,7 @@
       <div class="panel-body">
         <div class="input-group">
           <label class="input-label">API URL</label>
-          <input type="url" id="apiUrl" value="https://musicai-platform-production.up.railway.app" placeholder="https://musicai-platform-production.up.railway.app">
+          <input type="url" id="apiUrl" value="https://your-api.railway.app" placeholder="https://din-app.railway.app">
         </div>
         <button onclick="checkHealth()" style="
           background: transparent;
@@ -895,7 +895,7 @@ async function selectTrack(evt, id) {
     document.querySelectorAll('.track-item').forEach(el => el.classList.remove('active'));
     evt.currentTarget.classList.add('active');
   } catch(e) {
-    toast('Kunde inte hämta track', 'error');
+    toast('Error: ' + e.message, 'error'); console.error('selectTrack error', e);
   }
 }
 
