@@ -444,11 +444,12 @@ function renderTrackList() {
 }
 
 async function selectTrack(evt, id) {
+    const el = evt.currentTarget;
   try {
     const track = await apiFetch('/api/v1/tracks/' + id);
     showResult(track);
-    document.querySelectorAll('.track-item').forEach(el => el.classList.remove('active'));
-    evt.currentTarget.classList.add('active');
+    document.querySelectorAll(".track-item").forEach(item => item.classList.remove('active'));
+    el.classList.add('active');
   } catch(e) {
     console.error('selectTrack error:', e);
     toast('Error: ' + e.message, 'error');
