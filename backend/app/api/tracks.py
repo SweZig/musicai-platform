@@ -1,211 +1,181 @@
-import asyncio
+"""
+Tracks API — clean architecture:
+
+Upload → save to DB (async) → fire sync task in ThreadPoolExecutor
+Background task: pure sync — librosa + psycopg2-style sync SQLAlchemy
+No async-in-thread, no nested event loops.
+"""
 import hashlib
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import List
 
+import structlog
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
-from app.db import get_db
+from app.db import get_db, get_sync_session
 from app.models.track import Track, AudioFeatures, Classification
 from app.schemas.track import TrackUploadResponse, TrackDetailResponse, SimilarTrackResponse
 
+log = APIRouter()
 router = APIRouter()
 
-ALLOWED_EXTENSIONS = {".wav", ".mp3", ".aiff", ".aif", ".flac", ".ogg"}
-_executor = ThreadPoolExecutor(max_workers=2)
+ALLOWED = {".wav", ".mp3", ".aiff", ".aif", ".flac", ".ogg"}
+_pool   = ThreadPoolExecutor(max_workers=2)
+log     = structlog.get_logger()
 
 
-def _validate_audio_file(file: UploadFile) -> None:
+def _validate(file: UploadFile):
     import os
     ext = os.path.splitext(file.filename or "")[1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File format not allowed: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
+    if ext not in ALLOWED:
+        raise HTTPException(400, detail=f"Format not allowed: {ext}")
 
 
-def _run_analysis_sync(track_id: uuid.UUID, content: bytes, filename: str):
-    """Sync wrapper that runs the async analysis in a new event loop (ThreadPoolExecutor)."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_run_analysis(track_id, content, filename))
-    finally:
-        loop.close()
+# ── Pure sync background task ──────────────────────────────────────────────
+def _analyse(track_id: uuid.UUID, raw: bytes, filename: str):
+    """
+    Runs in a thread. Pure sync — no event loop, no asyncpg.
+    Uses a sync SQLAlchemy session for DB writes.
+    """
+    from app.core.features import extract
+    from app.core.classify import GenreClassifier
 
-
-async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
-    from app.db import get_session_factory
-    import structlog
-    log = structlog.get_logger()
-
-    async with get_session_factory()() as db:
+    with get_sync_session() as db:
         try:
-            track = await db.get(Track, track_id)
+            track = db.get(Track, track_id)
             if not track:
                 return
 
-            # Ingest
-            try:
-                from app.core.ingest import IngestProcessor
-                processor = IngestProcessor()
-                wav_bytes, audio_info = await processor.process(content, filename)
-                track.duration_sec = audio_info.get("duration_sec")
-                track.sample_rate  = audio_info.get("sample_rate")
-                track.channels     = audio_info.get("channels")
-            except Exception as e:
-                log.warning("ingest_failed", error=str(e))
-                wav_bytes = content
+            # Extract features — librosa reads raw bytes directly
+            features = extract(raw, filename)
 
-            # Features
-            from app.core.features import FeatureExtractor
-            extractor = FeatureExtractor()
-            features = await extractor.extract(wav_bytes)
-
-            CORE_FIELDS = {
-                "bpm", "key", "scale", "energy", "loudness_lufs", "danceability",
-                "spectral_centroid_mean", "spectral_rolloff_mean",
-                "zero_crossing_rate_mean", "mfcc_stats", "chroma_stats", "feature_vector",
+            CORE = {
+                "bpm","key","scale","energy","loudness_lufs","danceability",
+                "spectral_centroid_mean","spectral_rolloff_mean",
+                "zero_crossing_rate_mean","mfcc_stats","chroma_stats","feature_vector",
             }
+
+            # Update track duration from features
+            track.duration_sec = features.get("duration_sec")
+
             af = AudioFeatures(
-                track_id=track_id,
-                bpm=features.get("bpm"),
-                key=features.get("key"),
-                scale=features.get("scale"),
-                energy=features.get("energy"),
-                loudness_lufs=features.get("loudness_lufs"),
-                danceability=features.get("danceability"),
-                spectral_centroid_mean=features.get("spectral_centroid_mean"),
-                spectral_rolloff_mean=features.get("spectral_rolloff_mean"),
-                zero_crossing_rate_mean=features.get("zero_crossing_rate_mean"),
-                mfcc_stats=features.get("mfcc_stats"),
-                chroma_stats=features.get("chroma_stats"),
-                feature_vector=features.get("feature_vector"),
-                extra_features={k: v for k, v in features.items() if k not in CORE_FIELDS},
+                track_id                = track_id,
+                bpm                     = features.get("bpm"),
+                key                     = features.get("key"),
+                scale                   = features.get("scale"),
+                energy                  = features.get("energy"),
+                loudness_lufs           = features.get("loudness_lufs"),
+                danceability            = features.get("danceability"),
+                spectral_centroid_mean  = features.get("spectral_centroid_mean"),
+                spectral_rolloff_mean   = features.get("spectral_rolloff_mean"),
+                zero_crossing_rate_mean = features.get("zero_crossing_rate_mean"),
+                mfcc_stats              = features.get("mfcc_stats"),
+                chroma_stats            = features.get("chroma_stats"),
+                feature_vector          = features.get("feature_vector"),
+                extra_features          = {k: v for k, v in features.items() if k not in CORE},
             )
             db.add(af)
 
-            # Classification
-            from app.core.classify import GenreClassifier
-            classifier = GenreClassifier()
-            result = classifier.predict(features)
+            result = GenreClassifier().predict(features)
+            db.add(Classification(
+                track_id     = track_id,
+                genre        = result.get("genre"),
+                subgenre     = result.get("subgenre"),
+                confidence   = result.get("confidence"),
+                genre_scores = result.get("scores"),
+            ))
 
-            cls = Classification(
-                track_id=track_id,
-                genre=result.get("genre"),
-                subgenre=result.get("subgenre"),
-                confidence=result.get("confidence"),
-                genre_scores=result.get("scores"),
-            )
-            db.add(cls)
-
-            track.status = "analyzed"
+            track.status      = "analyzed"
             track.analyzed_at = datetime.utcnow()
-            await db.commit()
+            db.commit()
             log.info("analysis_complete", track_id=str(track_id))
 
         except Exception as e:
             log.error("analysis_failed", track_id=str(track_id), error=str(e))
             try:
-                track = await db.get(Track, track_id)
-                if track:
-                    track.status = "error"
-                    await db.commit()
+                t = db.get(Track, track_id)
+                if t:
+                    t.status = "error"
+                    db.commit()
             except Exception:
                 pass
 
 
-async def _get_track_with_relations(db: AsyncSession, track_id: uuid.UUID):
-    result = await db.execute(
-        select(Track)
-        .where(Track.id == track_id)
-        .options(selectinload(Track.features), selectinload(Track.classification))
-    )
-    return result.scalar_one_or_none()
+# ── Endpoints ──────────────────────────────────────────────────────────────
 
-
-@router.post("/upload", response_model=TrackUploadResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/upload", response_model=TrackUploadResponse, status_code=202)
 async def upload_track(
     file: UploadFile = File(...),
-    force: bool = Query(False, description="Force re-analysis even if file already exists"),
+    force: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    _validate_audio_file(file)
-    content = await file.read()
-    file_hash = hashlib.sha256(content).hexdigest()
+    _validate(file)
+    raw       = await file.read()
+    file_hash = hashlib.sha256(raw).hexdigest()
+    fname     = file.filename or "audio.wav"
 
     existing = await db.scalar(select(Track).where(Track.file_hash == file_hash))
 
     if existing and not force:
         return TrackUploadResponse(
-            track_id=existing.id,
-            job_id=str(existing.id),
-            status=existing.status,
-            message="File already exists. Use force=true to re-analyze.",
+            track_id=existing.id, job_id=str(existing.id),
+            status=existing.status, message="Already exists. Use force=true to re-analyze.",
         )
 
     if existing and force:
         await db.execute(delete(AudioFeatures).where(AudioFeatures.track_id == existing.id))
         await db.execute(delete(Classification).where(Classification.track_id == existing.id))
-        existing.status = "processing"
+        existing.status      = "processing"
         existing.analyzed_at = None
         await db.commit()
-        asyncio.get_event_loop().run_in_executor(_executor, _run_analysis_sync, existing.id, content, file.filename or "audio.wav")
+        _pool.submit(_analyse, existing.id, raw, fname)
         return TrackUploadResponse(
-            track_id=existing.id,
-            job_id=str(existing.id),
-            status="processing",
-            message="Re-analysis started.",
+            track_id=existing.id, job_id=str(existing.id),
+            status="processing", message="Re-analysis started.",
         )
 
     track_id = uuid.uuid4()
-    track = Track(
-        id=track_id,
-        title=file.filename or "Untitled",
-        original_filename=file.filename or "unknown",
-        file_hash=file_hash,
-        content_type=file.content_type or "audio/wav",
-        file_size_bytes=len(content),
-        status="processing",
-    )
-    db.add(track)
+    db.add(Track(
+        id=track_id, title=fname, original_filename=fname,
+        file_hash=file_hash, content_type=file.content_type or "audio/wav",
+        file_size_bytes=len(raw), status="processing",
+    ))
     await db.commit()
-
-    asyncio.get_event_loop().run_in_executor(_executor, _run_analysis_sync, track_id, content, file.filename or "audio.wav")
+    _pool.submit(_analyse, track_id, raw, fname)
 
     return TrackUploadResponse(
-        track_id=track_id,
-        job_id=str(track_id),
-        status="processing",
-        message="Uploaded — analysis in progress.",
+        track_id=track_id, job_id=str(track_id),
+        status="processing", message="Uploaded — analysis in progress.",
     )
-
-
-@router.get("/{track_id}", response_model=TrackDetailResponse)
-async def get_track(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    track = await _get_track_with_relations(db, track_id)
-    if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
-    return track
 
 
 @router.get("/", response_model=List[TrackDetailResponse])
 async def list_tracks(skip: int = 0, limit: int = 20, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Track)
-        .offset(skip).limit(limit)
+        select(Track).offset(skip).limit(limit)
         .order_by(Track.uploaded_at.desc())
         .options(selectinload(Track.features), selectinload(Track.classification))
     )
     return result.scalars().all()
 
 
+@router.get("/{track_id}", response_model=TrackDetailResponse)
+async def get_track(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Track).where(Track.id == track_id)
+        .options(selectinload(Track.features), selectinload(Track.classification))
+    )
+    track = result.scalar_one_or_none()
+    if not track:
+        raise HTTPException(404, detail="Track not found")
+    return track
+
+
 @router.get("/{track_id}/similar", response_model=List[SimilarTrackResponse])
-async def get_similar_tracks(track_id: uuid.UUID, limit: int = 10, db: AsyncSession = Depends(get_db)):
-    raise HTTPException(status_code=501, detail="Coming in Phase 3.")
+async def get_similar(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    raise HTTPException(501, detail="Coming in Phase 3.")
