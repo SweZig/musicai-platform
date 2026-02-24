@@ -58,6 +58,7 @@ class Classification(Base):
     genre        = Column(String, nullable=True)
     subgenre     = Column(String, nullable=True)
     confidence   = Column(Float, nullable=True)
-    genre_scores = Column(JSON, nullable=True)
+    genre_scores  = Column(JSON, nullable=True)
+    model_version = Column(String, nullable=False, default="heuristic-v1")
 
     track = relationship("Track", back_populates="classification")
