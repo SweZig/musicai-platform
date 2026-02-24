@@ -84,11 +84,12 @@ def _analyse(track_id: uuid.UUID, raw: bytes, filename: str):
 
             result = GenreClassifier().predict(features)
             db.add(Classification(
-                track_id     = track_id,
-                genre        = result.get("genre"),
-                subgenre     = result.get("subgenre"),
-                confidence   = result.get("confidence"),
-                genre_scores = result.get("scores"),
+                track_id      = track_id,
+                genre         = result.get("genre"),
+                subgenre      = result.get("subgenre"),
+                confidence    = result.get("confidence"),
+                genre_scores  = result.get("scores"),
+                model_version = result.get("method", "heuristic-v1"),
             ))
 
             track.status      = "analyzed"
