@@ -2,6 +2,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
 import os
+import structlog
+
+log = structlog.get_logger()
 
 
 def _get_async_url() -> str:
@@ -46,9 +49,17 @@ def get_session_factory():
 
 async def init_db():
     async with get_engine().begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        # Forsok aktivera pgvector men fortsatt om det misslyckas
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            log.info("pgvector_enabled")
+        except Exception as e:
+            log.warning("pgvector_not_available", error=str(e))
+
+        # Skapa tabeller utan Vector-kolumner for nu
         from app.models import track, sample, user  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
+        log.info("tables_created")
 
 
 async def get_db():
