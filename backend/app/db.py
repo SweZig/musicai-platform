@@ -50,7 +50,7 @@ def get_session_factory():
 async def init_db():
     engine = get_engine()
 
-    # Transaktion 1: pgvector (tyst fail)
+    # Transaction 1: pgvector (silent fail)
     try:
         async with engine.connect() as conn:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -59,11 +59,24 @@ async def init_db():
     except Exception as e:
         log.warning("pgvector_not_available", error=str(e))
 
-    # Transaktion 2: skapa tabeller (separat, paverkas inte av pgvector-felet)
+    # Transaction 2: create tables
     from app.models import track, sample, user  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         log.info("tables_created")
+
+    # Transaction 3: add new columns if they don't exist yet (safe migrations)
+    migrations = [
+        "ALTER TABLE audio_features ADD COLUMN IF NOT EXISTS extra_features JSONB",
+    ]
+    async with engine.begin() as conn:
+        for sql in migrations:
+            try:
+                await conn.execute(text(sql))
+                log.info("migration_applied", sql=sql)
+            except Exception as e:
+                log.warning("migration_skipped", sql=sql, error=str(e))
+    log.info("database_ready")
 
 
 async def get_db():
