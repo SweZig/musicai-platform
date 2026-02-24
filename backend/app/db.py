@@ -1,44 +1,58 @@
-"""
-Databas-session hantering med SQLAlchemy async.
-pgvector-tillägget aktiveras vid init.
-"""
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
+import os
 
-from app.config import settings
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.APP_ENV == "development",
-    pool_size=10,
-    max_overflow=20,
-)
-
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+def _get_async_url() -> str:
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        raise RuntimeError("DATABASE_URL is not set")
+    url = url.replace("postgresql://", "postgresql+asyncpg://")
+    url = url.replace("postgres://", "postgresql+asyncpg://")
+    return url
 
 
 class Base(DeclarativeBase):
     pass
 
 
+_engine = None
+_session_factory = None
+
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_async_engine(
+            _get_async_url(),
+            echo=os.environ.get("APP_ENV") == "development",
+            pool_size=5,
+            max_overflow=10,
+        )
+    return _engine
+
+
+def get_session_factory():
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = async_sessionmaker(
+            get_engine(),
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+    return _session_factory
+
+
 async def init_db():
-    """Aktivera pgvector och skapa tabeller."""
-    async with engine.begin() as conn:
-        # Aktivera pgvector-tillägget
+    async with get_engine().begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        # Importera alla modeller så Base känner till dem
         from app.models import track, sample, user  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
 
 
 async def get_db():
-    """FastAPI dependency för DB-session."""
-    async with AsyncSessionLocal() as session:
+    async with get_session_factory()() as session:
         try:
             yield session
             await session.commit()
