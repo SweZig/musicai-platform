@@ -1,10 +1,5 @@
-"""
-Feature-extraktion med Librosa.
-Extraherar: MFCC, Chroma, BPM, Tonart, Spektrala features, Energi.
-"""
 import io
 from typing import Any
-
 import numpy as np
 import structlog
 
@@ -13,36 +8,33 @@ log = structlog.get_logger()
 N_MFCC = 13
 HOP_LENGTH = 512
 N_FFT = 2048
+MAX_DURATION_SEC = 60  # Analysera max 60 sekunder
 
 
 class FeatureExtractor:
 
     async def extract(self, wav_bytes: bytes) -> dict[str, Any]:
-        """
-        Extraherar alla audio-features från WAV-bytes.
-        Returnerar en dict med skalära värden och aggregerade stats.
-        """
         import librosa
 
         buf = io.BytesIO(wav_bytes)
-        y, sr = librosa.load(buf, sr=44100, mono=True)
+        # Ladda max 60 sekunder for snabbare analys
+        y, sr = librosa.load(buf, sr=22050, mono=True, duration=MAX_DURATION_SEC)
 
         log.info("feature_extraction_start", duration=round(len(y) / sr, 2))
 
         features = {}
 
-        # ── BPM / Tempo ──────────────────────────────────────────────────────
+        # BPM
         tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LENGTH)
         features["bpm"] = round(float(tempo), 2)
         features["beat_count"] = int(len(beats))
 
-        # ── Tonart (via Chroma) ──────────────────────────────────────────────
+        # Tonart
         chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LENGTH)
         key_idx = int(np.argmax(chroma.mean(axis=1)))
         keys = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
         features["key"] = keys[key_idx]
 
-        # Enkel dur/moll-detektion baserat på chroma-profil
         major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
         minor_profile = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
         chroma_mean = chroma.mean(axis=1)
@@ -51,7 +43,7 @@ class FeatureExtractor:
         features["scale"] = "major" if max(rolled_major) >= max(rolled_minor) else "minor"
         features["key_confidence"] = round(float(max(max(rolled_major), max(rolled_minor))), 3)
 
-        # ── MFCC ─────────────────────────────────────────────────────────────
+        # MFCC
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
         features["mfcc_stats"] = {
             "mean": mfcc.mean(axis=1).tolist(),
@@ -60,13 +52,12 @@ class FeatureExtractor:
             "max": mfcc.max(axis=1).tolist(),
         }
 
-        # ── Chroma stats ─────────────────────────────────────────────────────
         features["chroma_stats"] = {
             "mean": chroma.mean(axis=1).tolist(),
             "std": chroma.std(axis=1).tolist(),
         }
 
-        # ── Spektrala features ───────────────────────────────────────────────
+        # Spektrala features
         spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=HOP_LENGTH)
         features["spectral_centroid_mean"] = round(float(spectral_centroid.mean()), 2)
         features["spectral_centroid_std"] = round(float(spectral_centroid.std()), 2)
@@ -80,20 +71,18 @@ class FeatureExtractor:
         zcr = librosa.feature.zero_crossing_rate(y, hop_length=HOP_LENGTH)
         features["zero_crossing_rate_mean"] = round(float(zcr.mean()), 5)
 
-        # ── Energi & Dynamik ─────────────────────────────────────────────────
+        # Energi
         rms = librosa.feature.rms(y=y, hop_length=HOP_LENGTH)
         features["energy"] = round(float(rms.mean()), 5)
         features["energy_std"] = round(float(rms.std()), 5)
-
-        # Loudness (enkel approximation — pyloudnorm för EBU R128 i Fas 2)
         features["loudness_lufs"] = round(float(20 * np.log10(rms.mean() + 1e-9)), 2)
 
-        # Danceability (enkel heuristik: hög BPM-confidence + låg tempo-varians = dansbar)
+        # Danceability
         onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP_LENGTH)
         pulse = librosa.beat.plp(onset_envelope=onset_env, sr=sr, hop_length=HOP_LENGTH)
         features["danceability"] = round(float(np.clip(pulse.mean() * 3, 0, 1)), 3)
 
-        # ── Sammansatt feature-vektor för ML-klassificeraren ─────────────────
+        # Feature-vektor
         feature_vector = (
             features["mfcc_stats"]["mean"]
             + features["mfcc_stats"]["std"]
