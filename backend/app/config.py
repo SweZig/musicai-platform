@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me"
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: str = "*"
 
     # Database
     DATABASE_URL: str = ""
