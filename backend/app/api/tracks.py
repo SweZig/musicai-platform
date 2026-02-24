@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.db import get_db
 from app.models.track import Track, AudioFeatures, Classification
@@ -27,7 +28,6 @@ def _validate_audio_file(file: UploadFile) -> None:
 
 
 async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
-    """Kors analysen i bakgrunden - oberoende av HTTP-requesten."""
     from app.db import get_session_factory
     import structlog
     log = structlog.get_logger()
@@ -38,7 +38,6 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
             if not track:
                 return
 
-            # Ingest
             try:
                 from app.core.ingest import IngestProcessor
                 processor = IngestProcessor()
@@ -50,7 +49,6 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
                 log.warning("ingest_failed", error=str(e))
                 wav_bytes = content
 
-            # Features
             from app.core.features import FeatureExtractor
             extractor = FeatureExtractor()
             features = await extractor.extract(wav_bytes)
@@ -72,7 +70,6 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
             )
             db.add(af)
 
-            # Klassificering
             from app.core.classify import GenreClassifier
             classifier = GenreClassifier()
             result = classifier.predict(features)
@@ -102,6 +99,19 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
                 pass
 
 
+async def _get_track_with_relations(db: AsyncSession, track_id: uuid.UUID):
+    """Hamta track med alla relationer inladdade."""
+    result = await db.execute(
+        select(Track)
+        .where(Track.id == track_id)
+        .options(
+            selectinload(Track.features),
+            selectinload(Track.classification),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 @router.post("/upload", response_model=TrackUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_track(
     background_tasks: BackgroundTasks,
@@ -112,11 +122,13 @@ async def upload_track(
     content = await file.read()
     file_hash = hashlib.sha256(content).hexdigest()
 
-    existing = await db.scalar(select(Track).where(Track.file_hash == file_hash))
+    existing = await db.scalar(
+        select(Track).where(Track.file_hash == file_hash)
+    )
     if existing:
         return TrackUploadResponse(
             track_id=existing.id,
-            job_id="duplicate",
+            job_id=str(existing.id),
             status=existing.status,
             message="Filen ar redan uppladdad."
         )
@@ -134,7 +146,6 @@ async def upload_track(
     db.add(track)
     await db.commit()
 
-    # Starta analys i bakgrunden - returnerar direkt till klienten
     background_tasks.add_task(_run_analysis, track_id, content, file.filename or "audio.wav")
 
     return TrackUploadResponse(
@@ -147,7 +158,7 @@ async def upload_track(
 
 @router.get("/{track_id}", response_model=TrackDetailResponse)
 async def get_track(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    track = await db.get(Track, track_id)
+    track = await _get_track_with_relations(db, track_id)
     if not track:
         raise HTTPException(status_code=404, detail="Track hittades inte")
     return track
@@ -156,7 +167,14 @@ async def get_track(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 @router.get("/", response_model=List[TrackDetailResponse])
 async def list_tracks(skip: int = 0, limit: int = 20, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Track).offset(skip).limit(limit).order_by(Track.uploaded_at.desc())
+        select(Track)
+        .offset(skip)
+        .limit(limit)
+        .order_by(Track.uploaded_at.desc())
+        .options(
+            selectinload(Track.features),
+            selectinload(Track.classification),
+        )
     )
     return result.scalars().all()
 
