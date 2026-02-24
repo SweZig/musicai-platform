@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["python311", "ffmpeg", "libsndfile"]
+
+[phases.install]
+cmds = ["pip install --cache-dir /root/.cache/pip -r requirements.txt"]
+
+[start]
+cmd = "python -c 'import asyncio; from app.db import init_db; asyncio.run(init_db())' && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
