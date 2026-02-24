@@ -1,0 +1,37 @@
+# ── Web framework ────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+# ── Async & Tasks ────────────────────────────────
+celery[redis]==5.4.0
+redis==5.1.0
+
+# ── Database ─────────────────────────────────────
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+pgvector==0.3.5
+alembic==1.13.3
+
+# ── File storage ─────────────────────────────────
+minio==7.2.9
+
+# ── Audio processing (Fas 1) ─────────────────────
+librosa==0.10.2
+soundfile==0.12.1
+pydub==0.25.1
+numpy==1.26.4
+
+# ── Utilities ────────────────────────────────────
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+aiofiles==24.1.0
+structlog==24.4.0
+
+# ── Fas 2+ (lägg till när modeller tränas) ────────
+# scikit-learn==1.5.2
+# torch==2.4.1
+# torchaudio==2.4.1
+# transformers==4.45.0
