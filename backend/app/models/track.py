@@ -45,6 +45,7 @@ class AudioFeatures(Base):
     chroma_stats            = Column(JSON, nullable=True)
     feature_vector          = Column(JSON, nullable=True)
     extra_features          = Column(JSON, nullable=True)   # camelot, groove, chords, structure
+    extracted_at            = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     track = relationship("Track", back_populates="features")
 
