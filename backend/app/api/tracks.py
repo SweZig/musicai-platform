@@ -1,10 +1,10 @@
+import asyncio
 import hashlib
 import uuid
-from typing import List
-from datetime import datetime
-
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from typing import List
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -17,6 +17,7 @@ from app.schemas.track import TrackUploadResponse, TrackDetailResponse, SimilarT
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".wav", ".mp3", ".aiff", ".aif", ".flac", ".ogg"}
+_executor = ThreadPoolExecutor(max_workers=2)
 
 
 def _validate_audio_file(file: UploadFile) -> None:
@@ -30,14 +31,14 @@ def _validate_audio_file(file: UploadFile) -> None:
 
 
 def _run_analysis_sync(track_id: uuid.UUID, content: bytes, filename: str):
-    """Sync wrapper — runs in ThreadPoolExecutor."""
-    import asyncio
+    """Sync wrapper that runs the async analysis in a new event loop (ThreadPoolExecutor)."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(_run_analysis(track_id, content, filename))
     finally:
         loop.close()
+
 
 async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
     from app.db import get_session_factory
@@ -50,6 +51,7 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
             if not track:
                 return
 
+            # Ingest
             try:
                 from app.core.ingest import IngestProcessor
                 processor = IngestProcessor()
@@ -61,10 +63,16 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
                 log.warning("ingest_failed", error=str(e))
                 wav_bytes = content
 
+            # Features
             from app.core.features import FeatureExtractor
             extractor = FeatureExtractor()
             features = await extractor.extract(wav_bytes)
 
+            CORE_FIELDS = {
+                "bpm", "key", "scale", "energy", "loudness_lufs", "danceability",
+                "spectral_centroid_mean", "spectral_rolloff_mean",
+                "zero_crossing_rate_mean", "mfcc_stats", "chroma_stats", "feature_vector",
+            }
             af = AudioFeatures(
                 track_id=track_id,
                 bpm=features.get("bpm"),
@@ -79,17 +87,11 @@ async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
                 mfcc_stats=features.get("mfcc_stats"),
                 chroma_stats=features.get("chroma_stats"),
                 feature_vector=features.get("feature_vector"),
-                extra_features={
-                    k: v for k, v in features.items()
-                    if k not in {
-                        "bpm", "key", "scale", "energy", "loudness_lufs", "danceability",
-                        "spectral_centroid_mean", "spectral_rolloff_mean", "zero_crossing_rate_mean",
-                        "mfcc_stats", "chroma_stats", "feature_vector",
-                    }
-                },
+                extra_features={k: v for k, v in features.items() if k not in CORE_FIELDS},
             )
             db.add(af)
 
+            # Classification
             from app.core.classify import GenreClassifier
             classifier = GenreClassifier()
             result = classifier.predict(features)
@@ -149,14 +151,12 @@ async def upload_track(
         )
 
     if existing and force:
-        # Delete old analysis data and re-run
         await db.execute(delete(AudioFeatures).where(AudioFeatures.track_id == existing.id))
         await db.execute(delete(Classification).where(Classification.track_id == existing.id))
         existing.status = "processing"
         existing.analyzed_at = None
         await db.commit()
-        executor = ThreadPoolExecutor(max_workers=1)
-    asyncio.get_event_loop().run_in_executor(executor, _run_analysis_sync, existing.id, content, file.filename or "audio.wav")
+        asyncio.get_event_loop().run_in_executor(_executor, _run_analysis_sync, existing.id, content, file.filename or "audio.wav")
         return TrackUploadResponse(
             track_id=existing.id,
             job_id=str(existing.id),
@@ -177,8 +177,7 @@ async def upload_track(
     db.add(track)
     await db.commit()
 
-    executor = ThreadPoolExecutor(max_workers=1)
-    asyncio.get_event_loop().run_in_executor(executor, _run_analysis_sync, track_id, content, file.filename or "audio.wav")
+    asyncio.get_event_loop().run_in_executor(_executor, _run_analysis_sync, track_id, content, file.filename or "audio.wav")
 
     return TrackUploadResponse(
         track_id=track_id,
