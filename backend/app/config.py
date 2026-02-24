@@ -1,10 +1,5 @@
-"""
-Konfiguration via miljövariabler (Pydantic Settings).
-Läser från .env-fil i dev, från Railway env vars i produktion.
-"""
 from functools import lru_cache
 from typing import List
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,16 +16,16 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me"
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: List[str] = ["*"]
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://musicai:musicai_pass@db:5432/musicai_db"
-    DATABASE_URL_SYNC: str = "postgresql://musicai:musicai_pass@db:5432/musicai_db"
+    DATABASE_URL: str = ""
+    DATABASE_URL_SYNC: str = ""
 
     # Redis / Celery
-    REDIS_URL: str = "redis://redis:6379/0"
-    CELERY_BROKER_URL: str = "redis://redis:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
@@ -46,7 +41,7 @@ class Settings(BaseSettings):
     USE_GPU: bool = False
     CLAP_MODEL: str = "laion/clap-htsat-unfused"
 
-    # Uppladdning
+    # Upload
     MAX_UPLOAD_SIZE_MB: int = 500
     ALLOWED_AUDIO_TYPES: List[str] = [
         "audio/wav", "audio/x-wav",
