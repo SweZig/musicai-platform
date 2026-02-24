@@ -68,6 +68,9 @@ async def init_db():
     # Transaction 3: add new columns if they don't exist yet (safe migrations)
     migrations = [
         "ALTER TABLE audio_features ADD COLUMN IF NOT EXISTS extra_features JSONB",
+        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS artist VARCHAR",
+        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS content_type VARCHAR",
+        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT",
     ]
     async with engine.begin() as conn:
         for sql in migrations:
