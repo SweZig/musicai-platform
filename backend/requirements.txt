@@ -5,7 +5,6 @@ python-multipart==0.0.12
 
 # ── Async & Tasks ────────────────────────────────
 celery[redis]==5.4.0
-flower==2.0.1
 redis==5.1.0
 
 # ── Database ─────────────────────────────────────
@@ -18,29 +17,21 @@ alembic==1.13.3
 # ── File storage ─────────────────────────────────
 minio==7.2.9
 
-# ── Audio processing ─────────────────────────────
+# ── Audio processing (Fas 1) ─────────────────────
 librosa==0.10.2
 soundfile==0.12.1
 pydub==0.25.1
-pyloudnorm==0.1.1
 numpy==1.26.4
-scipy==1.14.1
-
-# ── ML / AI (laddas vid behov) ────────────────────
-scikit-learn==1.5.2
-torch==2.4.1
-torchaudio==2.4.1
-transformers==4.45.0
-# Essentia installeras separat (se nedan)
-# essentia==2.1b6.dev1110
 
 # ── Utilities ────────────────────────────────────
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
-httpx==0.27.2
 aiofiles==24.1.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-tenacity==9.0.0
 structlog==24.4.0
+
+# ── Fas 2+ (lägg till när modeller tränas) ────────
+# scikit-learn==1.5.2
+# torch==2.4.1
+# torchaudio==2.4.1
+# transformers==4.45.0
