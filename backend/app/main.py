@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,18 +12,25 @@ log = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("startup", env=settings.APP_ENV, version="1.0.0")
+
     try:
         from app.db import init_db
-        await init_db()
+        await asyncio.wait_for(init_db(), timeout=15.0)
         log.info("database_ready")
+    except asyncio.TimeoutError:
+        log.warning("database_timeout", note="continuing without db init")
     except Exception as e:
         log.warning("database_not_available", error=str(e))
+
     try:
         from app.core.storage import init_storage
-        await init_storage()
+        await asyncio.wait_for(init_storage(), timeout=10.0)
         log.info("storage_ready")
+    except asyncio.TimeoutError:
+        log.warning("storage_timeout", note="continuing without storage init")
     except Exception as e:
         log.warning("storage_not_available", error=str(e))
+
     log.info("startup_complete")
     yield
     log.info("shutdown")
