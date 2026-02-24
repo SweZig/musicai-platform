@@ -65,6 +65,7 @@ def _analyse(track_id: uuid.UUID, raw: bytes, filename: str):
 
             af = AudioFeatures(
                 track_id                = track_id,
+                extracted_at            = datetime.utcnow(),
                 bpm                     = features.get("bpm"),
                 key                     = features.get("key"),
                 scale                   = features.get("scale"),
