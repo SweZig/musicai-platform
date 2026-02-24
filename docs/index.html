@@ -3,228 +3,548 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MusicAI Platform</title>
+<title>MusicAI — Audio Analysis Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg:      #0a0a0f;
-    --surface: #111118;
-    --border:  #1e1e2e;
-    --accent:  #7fffb2;
-    --accent2: #ff6b6b;
-    --accent3: #6b9fff;
-    --text:    #e8e8f0;
-    --muted:   #555570;
-    --mono:    'Space Mono', monospace;
-    --sans:    'Syne', sans-serif;
-  }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
-  body::before {
-    content: '';
-    position: fixed; inset: 0;
-    background-image: linear-gradient(rgba(127,255,178,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(127,255,178,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none; z-index: 0;
-  }
-  header {
-    position: relative; z-index: 10;
-    padding: 2rem 3rem;
-    display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid var(--border);
-  }
-  .logo { display: flex; align-items: center; gap: 0.75rem; }
-  .logo-mark {
-    width: 36px; height: 36px;
-    border: 2px solid var(--accent); border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    animation: pulse-ring 3s ease-in-out infinite;
-  }
-  @keyframes pulse-ring {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(127,255,178,0.4); }
-    50%       { box-shadow: 0 0 0 8px rgba(127,255,178,0); }
-  }
-  .logo-mark svg { width: 18px; height: 18px; fill: var(--accent); }
-  .logo-text { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; }
-  .logo-text span { color: var(--accent); }
-  .api-status { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); display: flex; align-items: center; gap: 0.5rem; }
-  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
-  .status-dot.online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: blink 2s infinite; }
-  .status-dot.offline { background: var(--accent2); }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-  main {
-    position: relative; z-index: 1;
-    max-width: 1100px; margin: 0 auto; padding: 3rem 2rem;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
-  }
-  @media (max-width: 768px) { main { grid-template-columns: 1fr; padding: 1.5rem 1rem; } header { padding: 1.5rem; } }
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-  .panel-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem; }
-  .panel-label { font-family: var(--mono); font-size: 0.65rem; color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase; }
-  .panel-number { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-left: auto; }
-  .panel-body { padding: 1.5rem; }
-  .upload-zone {
-    border: 1.5px dashed var(--border); border-radius: 4px; padding: 3rem 2rem;
-    text-align: center; cursor: pointer; transition: all 0.2s;
-    position: relative; background: rgba(127,255,178,0.01);
-  }
-  .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(127,255,178,0.05); }
-  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-  .upload-icon { margin: 0 auto 1rem; width: 48px; height: 48px; opacity: 0.5; }
-  .upload-title { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 0.4rem; }
-  .upload-sub { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); letter-spacing: 0.1em; }
-  .progress-wrap { margin-top: 1.5rem; display: none; }
-  .progress-wrap.visible { display: block; }
-  .progress-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-bottom: 0.5rem; }
-  .progress-bar-bg { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .progress-bar-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.4s ease; box-shadow: 0 0 8px var(--accent); }
-  .progress-step { font-family: var(--mono); font-size: 0.65rem; color: var(--accent); margin-top: 0.5rem; min-height: 1rem; }
-  .input-group { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.2rem; }
-  .input-label { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
-  input[type=text], input[type=url] {
-    background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    font-family: var(--mono); font-size: 0.75rem; padding: 0.6rem 0.8rem;
-    border-radius: 3px; outline: none; transition: border-color 0.2s; width: 100%;
-  }
-  input[type=text]:focus, input[type=url]:focus { border-color: var(--accent); }
-  canvas { width: 100%; height: 80px; display: block; border-radius: 3px; background: var(--bg); }
-  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
-  .result-card { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0.8rem 1rem; }
-  .result-card-label { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.3rem; }
-  .result-card-value { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; color: var(--accent); }
-  .result-card-value.secondary { color: var(--accent3); }
-  .result-card-value.tertiary  { color: var(--text); font-size: 0.9rem; }
-  .genre-badge {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    background: rgba(127,255,178,0.1); border: 1px solid rgba(127,255,178,0.3);
-    color: var(--accent); font-family: var(--mono); font-size: 0.75rem;
-    padding: 0.4rem 0.9rem; border-radius: 2px; letter-spacing: 0.1em;
-    text-transform: uppercase; margin-bottom: 1rem;
-  }
-  .conf-item { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
-  .conf-label { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); width: 90px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .conf-bar-bg { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .conf-bar-fill { height: 100%; border-radius: 2px; transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1); }
-  .conf-pct { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); width: 30px; text-align: right; }
-  .track-list { display: flex; flex-direction: column; gap: 0.5rem; }
-  .track-item {
-    display: flex; align-items: center; gap: 1rem;
-    padding: 0.75rem 1rem; background: var(--bg);
-    border: 1px solid var(--border); border-radius: 3px;
-    transition: border-color 0.2s; cursor: pointer;
-  }
-  .track-item:hover { border-color: var(--muted); }
-  .track-item.active { border-color: var(--accent); }
-  .track-status { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .track-name { font-size: 0.8rem; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .track-meta { font-family: var(--mono); font-size: 0.6rem; color: var(--muted); }
-  .track-genre { font-family: var(--mono); font-size: 0.6rem; color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase; }
-  .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; }
-  #oscilloscope { height: 60px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; margin-bottom: 1rem; width: 100%; display: block; }
-  #toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--surface); border: 1px solid var(--border); padding: 0.8rem 1.2rem; border-radius: 3px; font-family: var(--mono); font-size: 0.7rem; z-index: 100; transform: translateY(100px); opacity: 0; transition: all 0.3s; }
-  #toast.show    { transform: translateY(0); opacity: 1; }
-  #toast.success { border-color: var(--accent); color: var(--accent); }
-  #toast.error   { border-color: var(--accent2); color: var(--accent2); }
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+:root {
+  --bg:       #0c0c0c;
+  --bg2:      #111111;
+  --bg3:      #181818;
+  --border:   #272727;
+  --border2:  #333;
+  --amber:    #f5a623;
+  --amber-dim:#8a5e14;
+  --green:    #4caf6e;
+  --red:      #e05555;
+  --blue:     #5b8def;
+  --text:     #d8d8d8;
+  --text-dim: #666;
+  --mono:     'IBM Plex Mono', monospace;
+  --display:  'Bebas Neue', sans-serif;
+  --body:     'IBM Plex Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Grain overlay ── */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 9999; opacity: 0.35;
+}
+
+/* ── Header ── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 2rem; height: 52px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-family: var(--display); font-size: 1.6rem;
+  letter-spacing: 0.05em; color: var(--text);
+}
+
+.logo-dot { color: var(--amber); }
+
+.header-right {
+  display: flex; align-items: center; gap: 1.5rem;
+}
+
+.status-pill {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-family: var(--mono); font-size: 0.6rem;
+  color: var(--text-dim); letter-spacing: 0.08em;
+  background: var(--bg3); border: 1px solid var(--border);
+  padding: 0.25rem 0.6rem; border-radius: 2px;
+}
+
+.status-led {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-dim);
+}
+.status-led.on  { background: var(--green); box-shadow: 0 0 6px var(--green); animation: led-blink 2s ease infinite; }
+.status-led.off { background: var(--red); }
+
+@keyframes led-blink { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+/* ── Layout ── */
+.workspace {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: calc(100vh - 52px);
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  grid-row: 1 / 3;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+
+.sidebar-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+}
+
+.section-label {
+  font-family: var(--mono); font-size: 0.55rem;
+  color: var(--amber); letter-spacing: 0.2em; text-transform: uppercase;
+}
+
+.section-num {
+  font-family: var(--mono); font-size: 0.5rem; color: var(--text-dim);
+}
+
+.section-body { padding: 1rem; }
+
+/* ── API config ── */
+.field { margin-bottom: 0.75rem; }
+.field-label { font-family: var(--mono); font-size: 0.55rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.3rem; display: block; }
+
+input[type=url] {
+  width: 100%; background: var(--bg); border: 1px solid var(--border2);
+  color: var(--text); font-family: var(--mono); font-size: 0.65rem;
+  padding: 0.45rem 0.6rem; border-radius: 2px; outline: none;
+  transition: border-color 0.15s;
+}
+input[type=url]:focus { border-color: var(--amber); }
+
+.btn {
+  width: 100%; padding: 0.5rem;
+  background: transparent; border: 1px solid var(--amber);
+  color: var(--amber); font-family: var(--mono); font-size: 0.6rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  cursor: pointer; border-radius: 2px; transition: all 0.15s;
+}
+.btn:hover { background: rgba(245,166,35,0.1); }
+.btn:active { transform: scale(0.98); }
+
+/* ── Upload zone ── */
+.upload-zone {
+  border: 1.5px dashed var(--border2); border-radius: 3px;
+  padding: 2rem 1rem; text-align: center; cursor: pointer;
+  position: relative; transition: all 0.2s;
+  background: rgba(245,166,35,0.02);
+}
+.upload-zone:hover, .upload-zone.over {
+  border-color: var(--amber); background: rgba(245,166,35,0.05);
+}
+.upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+.upload-icon-wrap { margin-bottom: 0.75rem; opacity: 0.4; }
+.upload-title { font-size: 0.8rem; font-weight: 500; margin-bottom: 0.3rem; }
+.upload-formats { font-family: var(--mono); font-size: 0.55rem; color: var(--text-dim); letter-spacing: 0.08em; }
+
+/* ── Progress ── */
+.progress-area { display: none; margin-top: 0.75rem; }
+.progress-area.show { display: block; }
+.progress-filename { font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.4rem; }
+.progress-track {
+  height: 2px; background: var(--border);
+  border-radius: 1px; overflow: hidden; margin-bottom: 0.4rem;
+}
+.progress-fill { height: 100%; background: var(--amber); width: 0%; transition: width 0.4s ease; }
+.progress-label { font-family: var(--mono); font-size: 0.55rem; color: var(--amber); }
+
+/* ── Oscilloscope ── */
+#osc {
+  width: 100%; height: 48px; display: block;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 2px; margin-bottom: 0.75rem;
+}
+
+/* ── Track list ── */
+.track-list { flex: 1; overflow-y: auto; }
+.track-empty { padding: 2rem 1rem; text-align: center; font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); }
+
+.track-row {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 1rem; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.track-row:hover  { background: var(--bg3); }
+.track-row.active { background: rgba(245,166,35,0.07); border-left: 2px solid var(--amber); padding-left: calc(1rem - 2px); }
+
+.track-led { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.track-name { font-size: 0.75rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.track-info { text-align: right; }
+.track-genre { font-family: var(--mono); font-size: 0.55rem; color: var(--amber); letter-spacing: 0.08em; text-transform: uppercase; }
+.track-bpm   { font-family: var(--mono); font-size: 0.5rem; color: var(--text-dim); }
+
+/* ── Main content ── */
+.main-area {
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ── Empty state ── */
+.empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: var(--text-dim); font-family: var(--mono);
+  font-size: 0.65rem; letter-spacing: 0.1em; gap: 0.75rem;
+}
+
+.empty-state svg { opacity: 0.15; }
+
+/* ── Results ── */
+.results { padding: 1.5rem 2rem; display: none; flex-direction: column; gap: 1.5rem; }
+.results.show { display: flex; }
+
+/* ── Result top bar ── */
+.result-topbar {
+  display: flex; align-items: center; gap: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.genre-display {
+  font-family: var(--display); font-size: 3.5rem;
+  color: var(--amber); line-height: 1; letter-spacing: 0.05em;
+}
+
+.genre-sub {
+  font-family: var(--mono); font-size: 0.6rem;
+  color: var(--text-dim); letter-spacing: 0.15em;
+  text-transform: uppercase; margin-top: 0.25rem;
+}
+
+.key-display {
+  margin-left: auto;
+  text-align: right;
+}
+
+.key-main {
+  font-family: var(--display); font-size: 2.5rem;
+  color: var(--text); line-height: 1;
+}
+
+.key-camelot {
+  font-family: var(--mono); font-size: 0.7rem;
+  color: var(--amber); letter-spacing: 0.1em;
+  margin-top: 0.2rem;
+}
+
+/* ── Metrics row ── */
+.metrics-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border); border-radius: 3px; overflow: hidden;
+}
+
+.metric {
+  background: var(--bg2); padding: 0.9rem 1rem;
+}
+
+.metric-label {
+  font-family: var(--mono); font-size: 0.5rem;
+  color: var(--text-dim); letter-spacing: 0.15em;
+  text-transform: uppercase; margin-bottom: 0.35rem;
+}
+
+.metric-value {
+  font-family: var(--mono); font-size: 1.4rem;
+  font-weight: 600; color: var(--text); line-height: 1;
+}
+
+.metric-value.amber { color: var(--amber); }
+.metric-value.green { color: var(--green); }
+.metric-value.blue  { color: var(--blue); }
+
+.metric-sub {
+  font-family: var(--mono); font-size: 0.5rem;
+  color: var(--text-dim); margin-top: 0.2rem;
+}
+
+/* ── Section panels ── */
+.panels-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--border); border: 1px solid var(--border); border-radius: 3px; overflow: hidden;
+}
+
+.panel {
+  background: var(--bg2); padding: 1rem;
+}
+
+.panel-title {
+  font-family: var(--mono); font-size: 0.55rem;
+  color: var(--amber); letter-spacing: 0.2em;
+  text-transform: uppercase; margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem; border-bottom: 1px solid var(--border);
+}
+
+/* ── Bar charts ── */
+.bar-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+.bar-label { font-family: var(--mono); font-size: 0.55rem; color: var(--text-dim); width: 80px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex-shrink: 0; }
+.bar-track { flex: 1; height: 3px; background: var(--border); border-radius: 1px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 1px; transition: width 0.9s cubic-bezier(0.25,1,0.5,1); }
+.bar-val   { font-family: var(--mono); font-size: 0.5rem; color: var(--text-dim); width: 28px; text-align: right; flex-shrink: 0; }
+
+/* ── Chord list ── */
+.chord-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chord-pill {
+  font-family: var(--mono); font-size: 0.6rem;
+  background: var(--bg3); border: 1px solid var(--border2);
+  padding: 0.2rem 0.5rem; border-radius: 2px; color: var(--text);
+}
+.chord-pill .fn { color: var(--text-dim); font-size: 0.5rem; display: block; margin-top: 0.1rem; }
+
+.harm-functions {
+  font-family: var(--mono); font-size: 0.65rem; color: var(--blue);
+  letter-spacing: 0.05em; line-height: 1.8;
+  background: var(--bg3); border: 1px solid var(--border);
+  padding: 0.6rem 0.75rem; border-radius: 2px; margin-top: 0.5rem;
+}
+
+/* ── Structure timeline ── */
+.timeline { display: flex; gap: 2px; height: 28px; border-radius: 2px; overflow: hidden; }
+.seg {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 0.45rem; letter-spacing: 0.05em;
+  text-transform: uppercase; color: rgba(0,0,0,0.7); font-weight: 600;
+  min-width: 0; overflow: hidden;
+}
+.seg-intro   { background: #5b8def; }
+.seg-verse   { background: #4caf6e; }
+.seg-chorus  { background: var(--amber); }
+.seg-bridge  { background: #c86bff; }
+.seg-outro   { background: #666; }
+
+.seg-labels { display: flex; gap: 2px; margin-top: 0.3rem; }
+.seg-label {
+  font-family: var(--mono); font-size: 0.45rem; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Groove meters ── */
+.groove-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.groove-item { }
+.groove-name { font-family: var(--mono); font-size: 0.5rem; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.3rem; }
+.groove-val  { font-family: var(--mono); font-size: 1rem; font-weight: 600; color: var(--text); }
+.groove-val.amber { color: var(--amber); }
+
+/* ── Metadata footer ── */
+.meta-bar {
+  font-family: var(--mono); font-size: 0.55rem; color: var(--text-dim);
+  padding: 0.6rem 0; border-top: 1px solid var(--border);
+  display: flex; gap: 2rem; letter-spacing: 0.08em;
+}
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: var(--bg3); border: 1px solid var(--border2);
+  font-family: var(--mono); font-size: 0.6rem; padding: 0.6rem 1rem;
+  border-radius: 2px; z-index: 200;
+  transform: translateY(60px); opacity: 0; transition: all 0.25s;
+}
+#toast.show    { transform: translateY(0); opacity: 1; }
+#toast.success { border-color: var(--green); color: var(--green); }
+#toast.error   { border-color: var(--red); color: var(--red); }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .workspace { grid-template-columns: 1fr; }
+  .sidebar { grid-row: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .metrics-row { grid-template-columns: repeat(2, 1fr); }
+  .panels-grid { grid-template-columns: 1fr; }
+}
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">
-    <div class="logo-mark">
-      <svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+  <div class="logo">MUSIC<span class="logo-dot">.</span>AI</div>
+  <div class="header-right">
+    <div class="status-pill">
+      <div class="status-led" id="led"></div>
+      <span id="statusText">OFFLINE</span>
     </div>
-    <div class="logo-text">Music<span>AI</span></div>
-  </div>
-  <div class="api-status">
-    <div class="status-dot" id="statusDot"></div>
-    <span id="statusText">Connecting...</span>
   </div>
 </header>
 
-<main>
-  <div style="display:flex;flex-direction:column;gap:2rem;">
+<div class="workspace">
 
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-label">Configuration</span>
-        <span class="panel-number">01</span>
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+
+    <!-- Config -->
+    <div class="sidebar-section">
+      <div class="section-head">
+        <span class="section-label">Connection</span>
+        <span class="section-num">01</span>
       </div>
-      <div class="panel-body">
-        <div class="input-group">
-          <label class="input-label">API URL</label>
-          <input type="url" id="apiUrl" value="https://musicai-platform-production.up.railway.app" placeholder="https://your-app.railway.app">
+      <div class="section-body">
+        <div class="field">
+          <label class="field-label">API Endpoint</label>
+          <input type="url" id="apiUrl" value="https://musicai-platform-production.up.railway.app">
         </div>
-        <button onclick="checkHealth()" style="background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:var(--mono);font-size:0.7rem;padding:0.5rem 1rem;border-radius:3px;cursor:pointer;letter-spacing:0.1em;transition:background 0.2s;width:100%;"
-          onmouseover="this.style.background='rgba(127,255,178,0.1)'"
-          onmouseout="this.style.background='transparent'">
-          TEST CONNECTION
-        </button>
+        <button class="btn" onclick="checkHealth()">Connect</button>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-label">Upload</span>
-        <span class="panel-number">02</span>
+    <!-- Upload -->
+    <div class="sidebar-section">
+      <div class="section-head">
+        <span class="section-label">Upload</span>
+        <span class="section-num">02</span>
       </div>
-      <div class="panel-body">
-        <canvas id="oscilloscope"></canvas>
+      <div class="section-body">
+        <canvas id="osc"></canvas>
         <div class="upload-zone" id="dropZone">
           <input type="file" id="fileInput" accept=".wav,.mp3,.aiff,.aif,.flac,.ogg" onchange="handleFile(event)">
-          <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M24 8v24M16 16l8-8 8 8" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M8 36h32" stroke-linecap="round"/>
-          </svg>
-          <div class="upload-title">Drag here or click to select</div>
-          <div class="upload-sub" style="margin-top:0.5rem">WAV · MP3 · AIFF · FLAC · OGG</div>
-          <div class="upload-sub" style="margin-top:0.4rem;color:var(--muted)">Max size: WAV/AIFF 500 MB · MP3/OGG 100 MB · FLAC 300 MB</div>
-        </div>
-        <div class="progress-wrap" id="progressWrap">
-          <div class="progress-labels">
-            <span id="progressFile">—</span>
-            <span id="progressPct">0%</span>
+          <div class="upload-icon-wrap">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M16 6v16M10 12l6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6 26h20" stroke-linecap="round"/>
+            </svg>
           </div>
-          <div class="progress-bar-bg">
-            <div class="progress-bar-fill" id="progressFill"></div>
-          </div>
-          <div class="progress-step" id="progressStep">Initializing...</div>
+          <div class="upload-title">Drop audio file here</div>
+          <div class="upload-formats" style="margin-top:0.3rem">WAV · MP3 · AIFF · FLAC · OGG</div>
+          <div class="upload-formats" style="margin-top:0.2rem">Max 500 MB</div>
+        </div>
+        <div class="progress-area" id="progressArea">
+          <div class="progress-filename" id="progressFile">—</div>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-label" id="progressLabel">Initializing...</div>
         </div>
       </div>
     </div>
 
-  </div>
-
-  <div style="display:flex;flex-direction:column;gap:2rem;">
-
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-label">Analysis Results</span>
-        <span class="panel-number">03</span>
-      </div>
-      <div class="panel-body" id="resultsPanel">
-        <div class="empty">— No file analyzed yet —</div>
-      </div>
+    <!-- Track list -->
+    <div class="section-head">
+      <span class="section-label">Library</span>
+      <span class="section-num" id="trackCount">0 tracks</span>
+    </div>
+    <div class="track-list" id="trackList">
+      <div class="track-empty">No tracks yet</div>
     </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-label">Uploaded Tracks</span>
-        <span class="panel-number">04</span>
-      </div>
-      <div class="panel-body">
-        <div class="track-list" id="trackList">
-          <div class="empty">— No tracks yet —</div>
+  </aside>
+
+  <!-- ── Main area ── -->
+  <main class="main-area">
+
+    <div class="empty-state" id="emptyState">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1">
+        <circle cx="32" cy="32" r="20"/>
+        <circle cx="32" cy="32" r="8"/>
+        <line x1="32" y1="4" x2="32" y2="12"/>
+        <line x1="32" y1="52" x2="32" y2="60"/>
+        <line x1="4" y1="32" x2="12" y2="32"/>
+        <line x1="52" y1="32" x2="60" y2="32"/>
+      </svg>
+      <span>Upload a track to begin analysis</span>
+    </div>
+
+    <div class="results" id="results">
+
+      <!-- Top: Genre + Key -->
+      <div class="result-topbar">
+        <div>
+          <div class="genre-display" id="rGenre">—</div>
+          <div class="genre-sub" id="rSubgenre"></div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:0.5rem;color:var(--text-dim);letter-spacing:0.15em;margin-bottom:0.3rem">BPM</div>
+          <div style="font-family:var(--display);font-size:2.8rem;color:var(--text);line-height:1" id="rBpm">—</div>
+        </div>
+        <div class="key-display">
+          <div class="key-main" id="rKey">—</div>
+          <div class="key-camelot" id="rCamelot">—</div>
         </div>
       </div>
+
+      <!-- Metrics row -->
+      <div class="metrics-row">
+        <div class="metric">
+          <div class="metric-label">Energy</div>
+          <div class="metric-value amber" id="rEnergy">—</div>
+          <div class="metric-sub">RMS amplitude</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Danceability</div>
+          <div class="metric-value green" id="rDance">—</div>
+          <div class="metric-sub">Pulse consistency</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Dynamic range</div>
+          <div class="metric-value blue" id="rDynamic">—</div>
+          <div class="metric-sub">Peak / RMS ratio</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Loudness</div>
+          <div class="metric-value" id="rLoudness">—</div>
+          <div class="metric-sub">Approx. LUFS</div>
+        </div>
+      </div>
+
+      <!-- 2x2 panels -->
+      <div class="panels-grid">
+
+        <!-- Genre distribution -->
+        <div class="panel">
+          <div class="panel-title">Genre Distribution</div>
+          <div id="genreBars"></div>
+        </div>
+
+        <!-- Groove & Rhythm -->
+        <div class="panel">
+          <div class="panel-title">Groove & Rhythm</div>
+          <div class="groove-grid" id="grooveGrid"></div>
+        </div>
+
+        <!-- Chord Progression -->
+        <div class="panel">
+          <div class="panel-title">Chord Progression</div>
+          <div id="chordArea"></div>
+        </div>
+
+        <!-- Song Structure -->
+        <div class="panel">
+          <div class="panel-title">Song Structure</div>
+          <div id="structureArea"></div>
+        </div>
+
+      </div>
+
+      <!-- Metadata footer -->
+      <div class="meta-bar" id="metaBar"></div>
+
     </div>
 
-  </div>
-</main>
+  </main>
+</div>
 
 <div id="toast"></div>
 
@@ -232,70 +552,55 @@
 let tracks = [];
 let animFrame = null;
 let pollInterval = null;
+const BAR_COLORS = ['#f5a623','#5b8def','#4caf6e','#c86bff','#e05555','#50c8c8'];
+const SEG_CLASS  = { intro:'seg-intro', verse:'seg-verse', chorus:'seg-chorus', bridge:'seg-bridge', outro:'seg-outro' };
 
-function apiUrl() {
-  return document.getElementById('apiUrl').value.replace(/\/$/, '');
-}
+// ── API ────────────────────────────────────────────────────────────────────
+function apiBase() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
 
 async function apiFetch(path, opts = {}) {
-  const res = await fetch(apiUrl() + path, opts);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || 'HTTP ' + res.status);
-  }
+  const res = await fetch(apiBase() + path, opts);
+  if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || 'HTTP ' + res.status); }
   return res.json();
 }
 
+// ── Health ─────────────────────────────────────────────────────────────────
 async function checkHealth() {
-  const dot  = document.getElementById('statusDot');
-  const text = document.getElementById('statusText');
-  dot.className = 'status-dot';
-  text.textContent = 'Connecting...';
+  const led = document.getElementById('led');
+  const txt = document.getElementById('statusText');
+  led.className = 'status-led'; txt.textContent = 'CONNECTING';
   try {
-    const data = await apiFetch('/health');
-    dot.className = 'status-dot online';
-    text.textContent = 'Online · v' + (data.version || '1.0.0');
-    toast('Connected to API (' + (data.env || 'production') + ')', 'success');
+    const d = await apiFetch('/health');
+    led.className = 'status-led on';
+    txt.textContent = 'LIVE · ' + (d.env || 'prod').toUpperCase();
+    toast('Connected — API v' + (d.version || '1.0'), 'success');
     loadTracks();
   } catch(e) {
-    dot.className = 'status-dot offline';
-    text.textContent = 'Offline';
-    toast('Cannot reach API: ' + e.message, 'error');
+    led.className = 'status-led off'; txt.textContent = 'OFFLINE';
+    toast('Connection failed: ' + e.message, 'error');
   }
 }
 
-function drawIdle() {
-  const canvas = document.getElementById('oscilloscope');
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-  ctx.strokeStyle = 'rgba(127,255,178,0.3)'; ctx.lineWidth = 1;
-  ctx.beginPath();
-  const t = Date.now() / 1000;
-  for (let x = 0; x < W; x++) {
-    const y = H/2 + Math.sin((x/W)*Math.PI*6 + t*1.5)*6 + Math.sin((x/W)*Math.PI*14 + t*2.3)*3;
-    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-  animFrame = requestAnimationFrame(drawIdle);
-}
-
-function drawAnalyzing() {
+// ── Oscilloscope ───────────────────────────────────────────────────────────
+function drawOsc(active) {
   cancelAnimationFrame(animFrame);
-  const canvas = document.getElementById('oscilloscope');
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
-  const W = canvas.width, H = canvas.height;
+  const c = document.getElementById('osc');
+  const ctx = c.getContext('2d');
   function frame() {
-    ctx.clearRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(127,255,178,0.7)'; ctx.lineWidth = 1.5;
+    c.width = c.offsetWidth; c.height = c.offsetHeight;
+    const W = c.width, H = c.height, t = Date.now()/1000;
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle = active ? 'rgba(245,166,35,0.8)' : 'rgba(245,166,35,0.25)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    const t = Date.now() / 1000;
     for (let x = 0; x < W; x++) {
-      const noise = (Math.random() - 0.5) * 10;
-      const y = H/2 + Math.sin((x/W)*Math.PI*12 + t*4)*15 + Math.sin((x/W)*Math.PI*30 + t*7)*8 + noise;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      let y = H/2;
+      if (active) {
+        y += Math.sin((x/W)*Math.PI*10 + t*5)*12 + Math.sin((x/W)*Math.PI*23 + t*8)*6 + (Math.random()-0.5)*5;
+      } else {
+        y += Math.sin((x/W)*Math.PI*5 + t*1.2)*4 + Math.sin((x/W)*Math.PI*11 + t*1.9)*2;
+      }
+      x === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     }
     ctx.stroke();
     animFrame = requestAnimationFrame(frame);
@@ -303,176 +608,207 @@ function drawAnalyzing() {
   frame();
 }
 
-const dropZone = document.getElementById('dropZone');
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
-  if (file) uploadFile(file);
-});
+// ── Drag/drop ──────────────────────────────────────────────────────────────
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) uploadFile(f); });
+function handleFile(e) { const f = e.target.files[0]; if (f) uploadFile(f); }
 
-function handleFile(e) {
-  const file = e.target.files[0];
-  if (file) uploadFile(file);
-}
-
+// ── Upload ─────────────────────────────────────────────────────────────────
 async function uploadFile(file) {
   setProgress(true, file.name, 5, 'Uploading...');
-  drawAnalyzing();
-
-  const formData = new FormData();
-  formData.append('file', file);
-
+  drawOsc(true);
+  const fd = new FormData(); fd.append('file', file);
   let data;
   try {
-    const res = await fetch(apiUrl() + '/api/v1/tracks/upload', { method: 'POST', body: formData });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'HTTP ' + res.status);
-    }
+    const res = await fetch(apiBase() + '/api/v1/tracks/upload', { method:'POST', body:fd });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || 'HTTP ' + res.status); }
     data = await res.json();
   } catch(e) {
     toast('Upload failed: ' + e.message, 'error');
-    setProgress(false); drawIdle(); return;
+    setProgress(false); drawOsc(false); return;
   }
-
-  toast('Uploaded! Analyzing...', 'success');
-  setProgress(true, file.name, 20, 'Analysis started...');
-  pollJobStatus(data.track_id, data.job_id, file.name);
+  toast('Uploaded — analyzing...', 'success');
+  setProgress(true, file.name, 20, 'Analysis in progress...');
+  pollJob(data.track_id, data.job_id, file.name);
 }
 
-function pollJobStatus(trackId, jobId, filename) {
+// ── Poll ───────────────────────────────────────────────────────────────────
+function pollJob(trackId, jobId, filename) {
   clearInterval(pollInterval);
-  const steps = {
-    pending:  [10, 'Waiting in queue...'],
-    started:  [20, 'Starting pipeline...'],
-    progress: [50, 'Extracting features...'],
-    success:  [100, 'Analysis complete! ✓'],
-    failure:  [0, 'Error occurred'],
-  };
-
+  const steps = { pending:[10,'Queued...'], started:[20,'Starting...'], progress:[55,'Extracting features...'], success:[100,'Complete ✓'], failure:[0,'Failed'] };
   pollInterval = setInterval(async () => {
     try {
       const job = await apiFetch('/api/v1/jobs/' + jobId);
-      const [pct, label] = steps[job.status] || [30, 'Processing...'];
-      setProgress(true, filename, job.progress || pct, label);
-
+      const [pct, lbl] = steps[job.status] || [30,'Processing...'];
+      setProgress(true, filename, job.progress || pct, lbl);
       if (job.status === 'success') {
         clearInterval(pollInterval);
         setTimeout(async () => {
           const track = await apiFetch('/api/v1/tracks/' + trackId);
-          showResult(track);
+          renderResult(track);
           loadTracks();
-          drawIdle();
+          drawOsc(false);
           setProgress(false);
         }, 500);
       } else if (job.status === 'failure') {
         clearInterval(pollInterval);
-        toast('Analysis failed: ' + (job.error || 'Unknown error'), 'error');
-        setProgress(false); drawIdle();
+        toast('Analysis failed', 'error');
+        setProgress(false); drawOsc(false);
       }
-    } catch(e) { /* ignore transient errors */ }
+    } catch(e) {}
   }, 1500);
 }
 
-function showResult(track) {
-  const panel = document.getElementById('resultsPanel');
+// ── Render result ──────────────────────────────────────────────────────────
+function renderResult(track) {
   const f = track.features || {};
   const c = track.classification || {};
 
-  const genre  = c.genre   || '—';
-  const bpm    = f.bpm     ? f.bpm.toFixed(1) : '—';
-  const key    = f.key     ? (f.key + ' ' + (f.scale || '')).trim() : '—';
-  const energy = f.energy  ? (f.energy * 100).toFixed(1) + '%' : '—';
-  const dance  = f.danceability ? (f.danceability * 100).toFixed(0) + '%' : '—';
+  document.getElementById('emptyState').style.display = 'none';
+  const results = document.getElementById('results');
+  results.classList.add('show');
 
+  // Top bar
+  document.getElementById('rGenre').textContent   = (c.genre || '—').toUpperCase();
+  document.getElementById('rSubgenre').textContent = c.subgenre ? c.subgenre.toUpperCase() : '';
+  document.getElementById('rBpm').textContent      = f.bpm ? f.bpm.toFixed(1) : '—';
+  document.getElementById('rKey').textContent      = f.key ? (f.key + ' ' + (f.scale || '')).trim() : '—';
+  document.getElementById('rCamelot').textContent  = f.camelot ? 'Camelot ' + f.camelot : '';
+
+  // Metrics
+  document.getElementById('rEnergy').textContent   = f.energy ? (f.energy * 100).toFixed(1) + '%' : '—';
+  document.getElementById('rDance').textContent    = f.danceability ? (f.danceability * 100).toFixed(0) + '%' : '—';
+  document.getElementById('rDynamic').textContent  = f.dynamic_range ? f.dynamic_range.toFixed(1) + ' dB' : '—';
+  document.getElementById('rLoudness').textContent = f.loudness_lufs ? f.loudness_lufs.toFixed(1) + ' dB' : '—';
+
+  // Genre bars
   const scores = c.genre_scores || {};
-  const sortedGenres = Object.entries(scores).sort((a,b) => b[1]-a[1]).slice(0, 6);
-  const barColors = ['#7fffb2','#6b9fff','#ff6b6b','#ffd06b','#c86bff','#ff9b6b'];
+  const sorted = Object.entries(scores).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  document.getElementById('genreBars').innerHTML = sorted.length ? sorted.map(([g,s],i) => `
+    <div class="bar-row">
+      <span class="bar-label">${g}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(s*100).toFixed(1)}%;background:${BAR_COLORS[i]}"></div></div>
+      <span class="bar-val">${(s*100).toFixed(0)}%</span>
+    </div>
+  `).join('') : '<span style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim)">No genre data</span>';
 
-  panel.innerHTML = `
-    <div class="genre-badge"><span>♪</span> ${genre.toUpperCase()}${c.subgenre ? ' <span style="opacity:0.6">/ ' + c.subgenre + '</span>' : ''}</div>
-    <div class="result-grid">
-      <div class="result-card"><div class="result-card-label">BPM</div><div class="result-card-value">${bpm}</div></div>
-      <div class="result-card"><div class="result-card-label">Key</div><div class="result-card-value secondary">${key}</div></div>
-      <div class="result-card"><div class="result-card-label">Energy</div><div class="result-card-value tertiary">${energy}</div></div>
-      <div class="result-card"><div class="result-card-label">Danceability</div><div class="result-card-value tertiary">${dance}</div></div>
+  // Groove
+  const grooveItems = [
+    { label: 'Beat Strength', value: f.beat_strength ? (f.beat_strength*100).toFixed(0)+'%' : '—', amber: true },
+    { label: 'Groove Feel',   value: f.groove_feel   ? f.groove_feel.toUpperCase() : '—', amber: false },
+    { label: 'Swing Ratio',   value: f.swing_ratio   ? f.swing_ratio.toFixed(3) : '—', amber: false },
+    { label: 'Complexity',    value: f.rhythmic_complexity ? (f.rhythmic_complexity*100).toFixed(0)+'%' : '—', amber: true },
+    { label: 'Regularity',    value: f.beat_regularity ? (f.beat_regularity*100).toFixed(0)+'%' : '—', amber: false },
+    { label: 'Beat Count',    value: f.beat_count || '—', amber: false },
+  ];
+  document.getElementById('grooveGrid').innerHTML = grooveItems.map(g => `
+    <div class="groove-item">
+      <div class="groove-name">${g.label}</div>
+      <div class="groove-val${g.amber ? ' amber' : ''}">${g.value}</div>
     </div>
-    ${sortedGenres.length ? `
-      <div style="margin-bottom:0.5rem">
-        <div class="result-card-label" style="margin-bottom:0.75rem">Genre distribution</div>
-        ${sortedGenres.map(([g, s], i) => `
-          <div class="conf-item">
-            <span class="conf-label">${g}</span>
-            <div class="conf-bar-bg"><div class="conf-bar-fill" style="width:${(s*100).toFixed(1)}%;background:${barColors[i]}"></div></div>
-            <span class="conf-pct">${(s*100).toFixed(0)}%</span>
-          </div>
-        `).join('')}
-      </div>
-    ` : ''}
-    <div style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);margin-top:0.75rem;">
-      TRACK ID: ${track.id || '—'}<br>
-      ${track.duration_sec ? 'DURATION: ' + track.duration_sec.toFixed(1) + 's · ' : ''}
-      ${track.sample_rate  ? (track.sample_rate/1000) + 'kHz' : ''}
-    </div>
-  `;
+  `).join('');
+
+  // Chords
+  const chords = f.chords || [];
+  const progression = f.chord_progression || '';
+  const functions   = f.harmonic_functions || '';
+  document.getElementById('chordArea').innerHTML = chords.length ? `
+    <div class="chord-list">${chords.map(c => `
+      <div class="chord-pill">${c.chord}<span class="fn">${c.function}</span></div>
+    `).join('')}</div>
+    ${functions ? `<div class="harm-functions">${functions}</div>` : ''}
+  ` : '<span style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim)">No chord data</span>';
+
+  // Structure
+  const segs = f.segments || [];
+  if (segs.length) {
+    const total = segs[segs.length-1].end || 1;
+    document.getElementById('structureArea').innerHTML = `
+      <div class="timeline">${segs.map(s => {
+        const pct = ((s.end - s.start) / total * 100).toFixed(1);
+        const cls = SEG_CLASS[s.label] || 'seg-verse';
+        return `<div class="seg ${cls}" style="flex:${pct}">${s.label}</div>`;
+      }).join('')}</div>
+      <div class="seg-labels" style="margin-top:0.5rem">${segs.map(s => {
+        const pct = ((s.end - s.start) / total * 100).toFixed(1);
+        return `<div class="seg-label" style="flex:${pct}">${s.start}s</div>`;
+      }).join('')}</div>
+    `;
+  } else {
+    document.getElementById('structureArea').innerHTML = '<span style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim)">No structure data</span>';
+  }
+
+  // Meta
+  const meta = [];
+  if (track.id)            meta.push('ID: ' + track.id.split('-')[0].toUpperCase());
+  if (track.duration_sec)  meta.push('DURATION: ' + track.duration_sec.toFixed(1) + 's');
+  if (track.sample_rate)   meta.push('SR: ' + (track.sample_rate/1000).toFixed(1) + 'kHz');
+  if (track.file_size_bytes) meta.push('SIZE: ' + (track.file_size_bytes/1024/1024).toFixed(1) + 'MB');
+  document.getElementById('metaBar').textContent = meta.join('   ·   ');
 }
 
+// ── Track list ─────────────────────────────────────────────────────────────
 async function loadTracks() {
   try {
     tracks = await apiFetch('/api/v1/tracks/');
-    renderTrackList();
-  } catch(e) { /* silent fail */ }
+    renderTracks();
+  } catch(e) {}
 }
 
-function renderTrackList() {
+function renderTracks() {
   const list = document.getElementById('trackList');
-  if (!tracks.length) { list.innerHTML = '<div class="empty">— No tracks yet —</div>'; return; }
-  const statusColors = { uploaded: 'var(--muted)', processing: 'var(--accent3)', analyzed: 'var(--accent)', error: 'var(--accent2)' };
+  document.getElementById('trackCount').textContent = tracks.length + ' track' + (tracks.length !== 1 ? 's' : '');
+  if (!tracks.length) { list.innerHTML = '<div class="track-empty">No tracks yet</div>'; return; }
+  const colors = { uploaded:'var(--text-dim)', processing:'var(--blue)', analyzed:'var(--green)', error:'var(--red)' };
   list.innerHTML = tracks.map(t => `
-    <div class="track-item" onclick="selectTrack(event, '${t.id}')">
-      <div class="track-status" style="background:${statusColors[t.status] || 'var(--muted)'}"></div>
-      <div class="track-name">${t.title || t.original_filename}</div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.2rem">
+    <div class="track-row" onclick="selectTrack(event,'${t.id}')">
+      <div class="track-led" style="background:${colors[t.status]||'var(--text-dim)'}"></div>
+      <div>
+        <div class="track-name">${t.title || t.original_filename}</div>
+        <div class="track-bpm">${t.status.toUpperCase()}</div>
+      </div>
+      <div class="track-info">
         ${t.classification && t.classification.genre ? '<div class="track-genre">' + t.classification.genre + '</div>' : ''}
-        ${t.features && t.features.bpm ? '<div class="track-meta">' + t.features.bpm.toFixed(0) + ' BPM</div>' : ''}
-        <div class="track-meta">${t.status}</div>
+        ${t.features && t.features.bpm ? '<div class="track-bpm">' + t.features.bpm.toFixed(0) + ' BPM</div>' : ''}
+        ${t.features && t.features.camelot ? '<div class="track-bpm" style="color:var(--amber)">' + t.features.camelot + '</div>' : ''}
       </div>
     </div>
   `).join('');
 }
 
 async function selectTrack(evt, id) {
-    const el = evt.currentTarget;
+  const el = evt.currentTarget;
   try {
     const track = await apiFetch('/api/v1/tracks/' + id);
-    showResult(track);
-    document.querySelectorAll(".track-item").forEach(item => item.classList.remove('active'));
+    renderResult(track);
+    document.querySelectorAll('.track-row').forEach(r => r.classList.remove('active'));
     el.classList.add('active');
   } catch(e) {
-    console.error('selectTrack error:', e);
+    console.error('selectTrack:', e);
     toast('Error: ' + e.message, 'error');
   }
 }
 
-function setProgress(visible, filename = '', pct = 0, step = '') {
-  const wrap = document.getElementById('progressWrap');
-  wrap.className = 'progress-wrap' + (visible ? ' visible' : '');
-  document.getElementById('progressFile').textContent = filename;
-  document.getElementById('progressPct').textContent  = pct + '%';
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('progressStep').textContent  = step;
+// ── Progress ───────────────────────────────────────────────────────────────
+function setProgress(show, file='', pct=0, label='') {
+  const area = document.getElementById('progressArea');
+  area.className = 'progress-area' + (show ? ' show' : '');
+  document.getElementById('progressFile').textContent  = file;
+  document.getElementById('progressFill').style.width  = pct + '%';
+  document.getElementById('progressLabel').textContent = label;
 }
 
-function toast(msg, type = 'success') {
+// ── Toast ──────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
   const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'show ' + type;
+  el.textContent = msg; el.className = 'show ' + type;
   setTimeout(() => el.className = '', 3500);
 }
 
-drawIdle();
+// ── Init ───────────────────────────────────────────────────────────────────
+drawOsc(false);
 checkHealth();
 </script>
 </body>
