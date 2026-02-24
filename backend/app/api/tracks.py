@@ -90,6 +90,7 @@ def _analyse(track_id: uuid.UUID, raw: bytes, filename: str):
                 confidence    = result.get("confidence"),
                 genre_scores  = result.get("scores"),
                 model_version = result.get("method", "heuristic-v1"),
+                classified_at = datetime.utcnow(),
             ))
 
             track.status      = "analyzed"

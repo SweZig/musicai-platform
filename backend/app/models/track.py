@@ -60,5 +60,6 @@ class Classification(Base):
     confidence   = Column(Float, nullable=True)
     genre_scores  = Column(JSON, nullable=True)
     model_version = Column(String, nullable=False, default="heuristic-v1")
+    classified_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     track = relationship("Track", back_populates="classification")
