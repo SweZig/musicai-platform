@@ -3,7 +3,9 @@ import uuid
 from typing import List
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
@@ -26,6 +28,16 @@ def _validate_audio_file(file: UploadFile) -> None:
             detail=f"File format not allowed: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
+
+def _run_analysis_sync(track_id: uuid.UUID, content: bytes, filename: str):
+    """Sync wrapper — runs in ThreadPoolExecutor."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_run_analysis(track_id, content, filename))
+    finally:
+        loop.close()
 
 async def _run_analysis(track_id: uuid.UUID, content: bytes, filename: str):
     from app.db import get_session_factory
@@ -118,7 +130,6 @@ async def _get_track_with_relations(db: AsyncSession, track_id: uuid.UUID):
 
 @router.post("/upload", response_model=TrackUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_track(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     force: bool = Query(False, description="Force re-analysis even if file already exists"),
     db: AsyncSession = Depends(get_db),
@@ -144,7 +155,8 @@ async def upload_track(
         existing.status = "processing"
         existing.analyzed_at = None
         await db.commit()
-        background_tasks.add_task(_run_analysis, existing.id, content, file.filename or "audio.wav")
+        executor = ThreadPoolExecutor(max_workers=1)
+    asyncio.get_event_loop().run_in_executor(executor, _run_analysis_sync, existing.id, content, file.filename or "audio.wav")
         return TrackUploadResponse(
             track_id=existing.id,
             job_id=str(existing.id),
@@ -165,7 +177,8 @@ async def upload_track(
     db.add(track)
     await db.commit()
 
-    background_tasks.add_task(_run_analysis, track_id, content, file.filename or "audio.wav")
+    executor = ThreadPoolExecutor(max_workers=1)
+    asyncio.get_event_loop().run_in_executor(executor, _run_analysis_sync, track_id, content, file.filename or "audio.wav")
 
     return TrackUploadResponse(
         track_id=track_id,
