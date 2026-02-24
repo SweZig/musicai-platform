@@ -1,0 +1,155 @@
+services:
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: musicai_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - musicai_net
+
+  # ── Celery Worker (analys-pipeline) ─────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: musicai_worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./backend:/app
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - musicai_net
+
+  # ── Celery Beat (schemalagda jobb) ───────────────────────────────────────
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: musicai_beat
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    volumes:
+      - ./backend:/app
+    env_file: .env
+    depends_on:
+      - redis
+    networks:
+      - musicai_net
+
+  # ── Flower (Celery monitoring UI) ────────────────────────────────────────
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: musicai_flower
+    command: celery -A app.tasks.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    env_file: .env
+    depends_on:
+      - redis
+    networks:
+      - musicai_net
+
+  # ── PostgreSQL + pgvector ─────────────────────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: musicai_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-musicai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-musicai_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-musicai_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-musicai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - musicai_net
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: musicai_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - musicai_net
+
+  # ── MinIO (S3-kompatibel fillagring) ──────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: musicai_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web UI
+    networks:
+      - musicai_net
+
+  # ── MinIO Init (skapar buckets vid första start) ───────────────────────────
+  minio_init:
+    image: minio/mc:latest
+    container_name: musicai_minio_init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://minio:9000 minioadmin minioadmin123;
+      mc mb -p local/raw-uploads;
+      mc mb -p local/processed;
+      mc mb -p local/samples;
+      mc mb -p local/generated;
+      echo 'Buckets created';
+      "
+    networks:
+      - musicai_net
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  musicai_net:
+    driver: bridge
