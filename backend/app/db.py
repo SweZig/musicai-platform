@@ -29,7 +29,7 @@ def get_engine():
     if _engine is None:
         _engine = create_async_engine(
             _get_async_url(),
-            echo=os.environ.get("APP_ENV") == "development",
+            echo=False,
             pool_size=5,
             max_overflow=10,
         )
@@ -48,16 +48,20 @@ def get_session_factory():
 
 
 async def init_db():
-    async with get_engine().begin() as conn:
-        # Forsok aktivera pgvector men fortsatt om det misslyckas
-        try:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            log.info("pgvector_enabled")
-        except Exception as e:
-            log.warning("pgvector_not_available", error=str(e))
+    engine = get_engine()
 
-        # Skapa tabeller utan Vector-kolumner for nu
-        from app.models import track, sample, user  # noqa: F401
+    # Transaktion 1: pgvector (tyst fail)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.commit()
+            log.info("pgvector_enabled")
+    except Exception as e:
+        log.warning("pgvector_not_available", error=str(e))
+
+    # Transaktion 2: skapa tabeller (separat, paverkas inte av pgvector-felet)
+    from app.models import track, sample, user  # noqa: F401
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         log.info("tables_created")
 
