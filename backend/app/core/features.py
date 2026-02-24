@@ -249,14 +249,38 @@ class FeatureExtractor:
         groove = _detect_groove(y, sr, float(tempo), beats)
         features.update(groove)
 
-        # ── Chord Progression ────────────────────────────────────────────
-        chords = _detect_chords(y, sr, key_idx)
-        features["chord_progression"] = chords.get("progression", "")
-        features["harmonic_functions"] = chords.get("functions", "")
-        features["chords"] = chords.get("chords", [])
+        # ── Chord Progression (max 15s) ──────────────────────────────────
+        import asyncio, concurrent.futures
+        try:
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                chords = await asyncio.wait_for(
+                    loop.run_in_executor(pool, _detect_chords, y, sr, key_idx),
+                    timeout=15.0
+                )
+        except asyncio.TimeoutError:
+            log.warning("chord_detection_timeout")
+            chords = {"progression": "", "functions": "", "chords": []}
+        except Exception as e:
+            log.warning("chord_detection_error", error=str(e))
+            chords = {"progression": "", "functions": "", "chords": []}
+        features["chord_progression"]  = chords.get("progression", "")
+        features["harmonic_functions"]  = chords.get("functions", "")
+        features["chords"]              = chords.get("chords", [])
 
-        # ── Structure ────────────────────────────────────────────────────
-        structure = _detect_structure(y, sr)
+        # ── Structure (max 10s) ───────────────────────────────────────────
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                structure = await asyncio.wait_for(
+                    loop.run_in_executor(pool, _detect_structure, y, sr),
+                    timeout=10.0
+                )
+        except asyncio.TimeoutError:
+            log.warning("structure_detection_timeout")
+            structure = {"segments": [], "section_count": 0}
+        except Exception as e:
+            log.warning("structure_detection_error", error=str(e))
+            structure = {"segments": [], "section_count": 0}
         features["segments"]      = structure.get("segments", [])
         features["section_count"] = structure.get("section_count", 0)
 
