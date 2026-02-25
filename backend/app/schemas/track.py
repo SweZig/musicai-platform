@@ -76,6 +76,7 @@ class ClassificationSchema(BaseModel):
     subgenre: Optional[str] = None
     confidence: Optional[float] = None
     genre_scores: Optional[Dict[str, float]] = None
+    model_version: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
