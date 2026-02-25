@@ -360,6 +360,28 @@ const css = `
   .fade-in { animation: fadeIn 0.3s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
+  /* Re-analyze button */
+  .reanalyze-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .reanalyze-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .reanalyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* Confidence badge */
   .confidence {
     display: inline-flex;
@@ -457,7 +479,7 @@ function SimilarCard({ track, onClick }) {
   )
 }
 
-function TrackDetail({ track, onSelectTrack }) {
+function TrackDetail({ track, onSelectTrack, onReanalyze, reanalyzing }) {
   const [similar, setSimilar] = useState(null)
   const [loadingSimilar, setLoadingSimilar] = useState(false)
 
@@ -478,7 +500,16 @@ function TrackDetail({ track, onSelectTrack }) {
   return (
     <div className="detail fade-in">
       <div className="detail-header">
-        <div className="detail-title">{shortName(track.title || track.original_filename)}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div className="detail-title">{shortName(track.title || track.original_filename)}</div>
+          <button
+            className="reanalyze-btn"
+            onClick={() => onReanalyze(track.id)}
+            disabled={reanalyzing}
+          >
+            {reanalyzing ? <><span className="spinner" /> Analyserar...</> : '↻ Re-analysera'}
+          </button>
+        </div>
         <div className="detail-subtitle">
           {track.original_filename} &nbsp;·&nbsp; {fmtDur(track.duration_sec)} &nbsp;·&nbsp;
           <span style={{ color: track.status === 'analyzed' ? '#22c55e' : track.status === 'error' ? 'var(--red)' : 'var(--amber)' }}>
@@ -665,6 +696,33 @@ export default function App() {
     }
   }
 
+  const [reanalyzing, setReanalyzing] = useState(false)
+  const reanalyzeRef = useRef()
+  const [reanalyzeTargetId, setReanalyzeTargetId] = useState(null)
+
+  async function handleReanalyze(trackId) {
+    setReanalyzeTargetId(trackId)
+    reanalyzeRef.current?.click()
+  }
+
+  async function handleReanalyzeFile(files) {
+    const file = files[0]
+    if (!file || !reanalyzeTargetId) return
+    setError('')
+    setReanalyzing(true)
+    try {
+      const res = await uploadTrack(file, true)
+      const done = await pollJob(res.track_id, track => updateTrack(track))
+      updateTrack(done)
+      setSelected(done)
+    } catch (e) {
+      setError('Re-analys misslyckades: ' + e.message)
+    } finally {
+      setReanalyzing(false)
+      setReanalyzeTargetId(null)
+    }
+  }
+
   async function selectTrack(id) {
     const t = tracks.find(x => x.id === id) || null
     setSelected(t)
@@ -709,6 +767,13 @@ export default function App() {
                 accept=".wav,.mp3,.flac,.aiff,.aif,.ogg"
                 onChange={e => handleFiles(e.target.files)}
               />
+            <input
+              ref={reanalyzeRef}
+              type="file"
+              accept=".wav,.mp3,.flac,.aiff,.aif,.ogg"
+              onChange={e => handleReanalyzeFile(e.target.files)}
+              style={{ display: 'none' }}
+            />
             </div>
             {uploading && (
               <div>
@@ -755,7 +820,12 @@ export default function App() {
         {/* Main */}
         <main className="main">
           {selected ? (
-            <TrackDetail track={selected} onSelectTrack={selectTrack} />
+            <TrackDetail
+              track={selected}
+              onSelectTrack={selectTrack}
+              onReanalyze={handleReanalyze}
+              reanalyzing={reanalyzing && reanalyzeTargetId === selected?.id}
+            />
           ) : (
             <div className="empty-state">
               <div className="empty-icon">◎</div>
