@@ -129,7 +129,7 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
 
     # BPM
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LEN)
-    f["bpm"]        = round(float(tempo), 2)
+    f["bpm"]        = round(float(np.squeeze(tempo)), 2)
     f["beat_count"] = int(len(beats))
 
     # Key / Camelot
@@ -171,7 +171,7 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
         even = diff[::2].mean()
         odd  = diff[1::2].mean() if len(diff[1::2]) else even
         f["swing_ratio"]     = round(float(even / (odd + 1e-8)), 3)
-        ideal                = 60.0 / float(tempo)
+        ideal                = 60.0 / float(np.squeeze(tempo))
         f["beat_regularity"] = round(float(np.clip(1.0 - np.std(diff) / (ideal + 1e-8), 0, 1)), 3)
     else:
         f["swing_ratio"]     = 1.0
@@ -189,7 +189,7 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     f["chords"]             = chords
 
     # ── Structure — always based on full file duration ─────────────────────
-    f["segments"]     = _structure(full_duration, float(tempo))
+    f["segments"]     = _structure(full_duration, float(np.squeeze(tempo)))
     f["section_count"] = len(f["segments"])
     f["duration_sec"] = round(full_duration, 2)
 
