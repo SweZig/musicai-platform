@@ -24,11 +24,13 @@ class GenreClassifier:
 
     def _load_model(self):
         """Ladda tränad modell om den finns, annars använd regelbaserad fallback."""
+        resolved = os.path.abspath(MODEL_PATH)
+        log.info("classifier_path_check", resolved=resolved, exists=os.path.exists(resolved))
         if os.path.exists(MODEL_PATH):
             try:
                 with open(MODEL_PATH, "rb") as f:
                     model = pickle.load(f)
-                log.info("classifier_model_loaded", path=MODEL_PATH)
+                log.info("classifier_model_loaded", resolved=resolved)
                 return model
             except Exception as e:
                 log.warning("classifier_load_failed", error=str(e))
