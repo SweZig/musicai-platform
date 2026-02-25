@@ -1,6 +1,11 @@
 """
 Pure synchronous feature extraction — no async, no event loop issues.
 Called from a ThreadPoolExecutor in tracks.py.
+
+Strategy (Alt 2 — two-pass):
+  Pass 1: Read full duration instantly via soundfile (no decode).
+  Pass 2: Load up to ANALYSIS_DUR seconds at low SR for spectral/rhythm work.
+  Structure and duration_sec always reflect the full file.
 """
 import io
 from typing import Any
@@ -9,11 +14,11 @@ import structlog
 
 log = structlog.get_logger()
 
-N_MFCC    = 13
-HOP_LEN   = 1024
-N_FFT     = 2048
-MAX_DUR   = 30    # seconds
-SR        = 16000 # Hz — sufficient for music features, much faster than 22050
+N_MFCC       = 13
+HOP_LEN      = 1024
+N_FFT        = 2048
+ANALYSIS_DUR = 60   # seconds of audio used for spectral/rhythm analysis
+SR           = 16000
 
 CAMELOT = {
     (0,True):"8B",(1,True):"3B",(2,True):"10B",(3,True):"5B",(4,True):"12B",(5,True):"7B",
@@ -31,6 +36,20 @@ COMMON_PROGRESSIONS = {
     "ii-V-I":    [2,7,0],
     "I-IV-vi-V": [0,5,9,7],
 }
+
+
+def _get_full_duration(raw_bytes: bytes) -> float:
+    """
+    Read the file's real duration without decoding audio.
+    Falls back to None if soundfile can't handle the format.
+    """
+    try:
+        import soundfile as sf
+        buf = io.BytesIO(raw_bytes)
+        info = sf.info(buf)
+        return info.duration
+    except Exception:
+        return None
 
 
 def _detect_key(chroma_mean):
@@ -56,35 +75,55 @@ def _chords(chroma_mean, key_idx):
     return best, " — ".join(NUMERAL.get(i,"?") for i in intervals), chords
 
 
-def _structure(duration, bpm):
+def _structure(full_duration: float, bpm: float) -> list:
+    """
+    Build song structure based on the FULL duration of the file,
+    not the analysis window. Timestamps are always correct.
+    """
     bar = (60.0 / max(float(bpm), 60)) * 4
-    bars = duration / bar
+    bars = full_duration / bar
+
     if bars < 16:
-        cuts = [0, 0.2, 0.6, 1.0]
-        labels = ["intro","verse","outro"]
+        cuts   = [0, 0.2, 0.6, 1.0]
+        labels = ["intro", "verse", "outro"]
     else:
-        cuts = [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
-        labels = ["intro","verse","chorus","verse","chorus","outro"]
+        cuts   = [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+        labels = ["intro", "verse", "chorus", "verse", "chorus", "outro"]
+
     segs = []
     for i, lbl in enumerate(labels):
-        s = round(duration * cuts[i],   1)
-        e = round(duration * cuts[i+1], 1)
-        segs.append({"label":lbl,"start":s,"end":e,"duration":round(e-s,1)})
+        s = round(full_duration * cuts[i],   1)
+        e = round(full_duration * cuts[i+1], 1)
+        segs.append({"label": lbl, "start": s, "end": e, "duration": round(e - s, 1)})
     return segs
 
 
 def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     """
-    Synchronous feature extraction. 
-    librosa handles WAV/MP3/FLAC/OGG natively — no pre-conversion needed.
+    Two-pass feature extraction:
+      Pass 1 — instant: get real file duration via soundfile metadata.
+      Pass 2 — analysis: load up to ANALYSIS_DUR seconds for all spectral work.
+    Structure and duration_sec always reflect the full file.
     """
     import librosa
 
     log.info("feature_extraction_start", filename=filename)
 
+    # ── Pass 1: real duration ──────────────────────────────────────────────
+    full_duration = _get_full_duration(raw_bytes)
+    log.info("duration_detected", full_duration=round(full_duration, 2) if full_duration else "unknown")
+
+    # ── Pass 2: load analysis window ──────────────────────────────────────
     buf = io.BytesIO(raw_bytes)
-    y, sr = librosa.load(buf, sr=SR, mono=True, duration=MAX_DUR)
-    duration = len(y) / sr
+    y, sr = librosa.load(buf, sr=SR, mono=True, duration=ANALYSIS_DUR)
+    analysis_duration = len(y) / sr
+
+    # If soundfile failed (e.g. MP3 edge case), fall back to librosa's duration
+    if full_duration is None:
+        log.warning("duration_fallback", note="soundfile failed, loading full file")
+        buf2 = io.BytesIO(raw_bytes)
+        y_full, _ = librosa.load(buf2, sr=SR, mono=True)
+        full_duration = len(y_full) / sr
 
     f: dict[str, Any] = {}
 
@@ -143,16 +182,18 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     f["rhythmic_complexity"] = round(float(np.clip(-np.sum(hist * np.log2(hist + 1e-8)) / np.log2(20), 0, 1)), 3)
     f["groove_feel"]         = "swung" if f["swing_ratio"] > 1.15 else "straight" if f["swing_ratio"] < 0.9 else "even"
 
-    # Chords + Structure (fast heuristics)
+    # Chords
     prog, funcs, chords = _chords(chroma_mean, key_idx)
     f["chord_progression"]  = prog
     f["harmonic_functions"] = funcs
     f["chords"]             = chords
-    f["segments"]           = _structure(duration, float(tempo))
-    f["section_count"]      = len(f["segments"])
-    f["duration_sec"]       = round(duration, 2)
 
-    # ML feature vector
+    # ── Structure — always based on full file duration ─────────────────────
+    f["segments"]     = _structure(full_duration, float(tempo))
+    f["section_count"] = len(f["segments"])
+    f["duration_sec"] = round(full_duration, 2)
+
+    # ML feature vector (based on analysis window — intentional)
     f["feature_vector"] = [round(float(v), 6) for v in (
         f["mfcc_stats"]["mean"] + f["mfcc_stats"]["std"] + f["chroma_stats"]["mean"] + [
             f["bpm"], f["spectral_centroid_mean"], f["spectral_rolloff_mean"],
@@ -162,5 +203,7 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
         ]
     )]
 
-    log.info("feature_extraction_complete", bpm=f["bpm"], key=f["key"], camelot=f["camelot"])
+    log.info("feature_extraction_complete",
+             bpm=f["bpm"], key=f["key"], camelot=f["camelot"],
+             duration_full=f["duration_sec"], duration_analysed=round(analysis_duration, 2))
     return f
