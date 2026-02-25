@@ -9,8 +9,9 @@ import hashlib
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
+import numpy as np
 import structlog
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +22,6 @@ from app.db import get_db, get_sync_session
 from app.models.track import Track, AudioFeatures, Classification
 from app.schemas.track import TrackUploadResponse, TrackDetailResponse, SimilarTrackResponse
 
-log = APIRouter()
 router = APIRouter()
 
 ALLOWED = {".wav", ".mp3", ".aiff", ".aif", ".flac", ".ogg"}
@@ -34,6 +34,39 @@ def _validate(file: UploadFile):
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED:
         raise HTTPException(400, detail=f"Format not allowed: {ext}")
+
+
+# ── Cosine similarity helpers ──────────────────────────────────────────────
+
+def _cosine_similarity(a: list, b: list) -> float:
+    """Cosine similarity mellan två feature-vektorer."""
+    va = np.array(a, dtype=np.float32)
+    vb = np.array(b, dtype=np.float32)
+    norm_a = np.linalg.norm(va)
+    norm_b = np.linalg.norm(vb)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(np.dot(va, vb) / (norm_a * norm_b))
+
+
+def _batch_cosine_similarity(query: list, candidates: list[list]) -> np.ndarray:
+    """
+    Beräknar cosine similarity mellan query och en batch kandidater.
+    Mer effektivt än att loopa — en matris-multiplikation.
+    """
+    q = np.array(query, dtype=np.float32)
+    M = np.array(candidates, dtype=np.float32)           # shape: (N, dim)
+
+    q_norm  = np.linalg.norm(q)
+    m_norms = np.linalg.norm(M, axis=1)                  # shape: (N,)
+
+    # Undvik division med noll
+    valid = m_norms > 0
+    scores = np.zeros(len(candidates), dtype=np.float32)
+    if q_norm > 0:
+        scores[valid] = M[valid] @ q / (m_norms[valid] * q_norm)
+
+    return scores
 
 
 # ── Pure sync background task ──────────────────────────────────────────────
@@ -180,5 +213,90 @@ async def get_track(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{track_id}/similar", response_model=List[SimilarTrackResponse])
-async def get_similar(track_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    raise HTTPException(501, detail="Coming in Phase 3.")
+async def get_similar(
+    track_id: uuid.UUID,
+    limit: int = Query(default=10, ge=1, le=50),
+    min_score: float = Query(default=0.0, ge=0.0, le=1.0, description="Minsta similarity-score (0.0–1.0)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returnerar de {limit} mest liknande tracks baserat på cosine similarity
+    på 48-dimensionell feature-vektor (MFCC + chroma + spektrala features).
+
+    Kräver att både query-track och kandidaterna är analyserade (status=analyzed).
+    """
+    # ── Hämta query-track ─────────────────────────────────────────────────
+    result = await db.execute(
+        select(Track).where(Track.id == track_id)
+        .options(selectinload(Track.features), selectinload(Track.classification))
+    )
+    track = result.scalar_one_or_none()
+    if not track:
+        raise HTTPException(404, detail="Track not found")
+
+    if track.status != "analyzed" or not track.features:
+        raise HTTPException(
+            status_code=400,
+            detail="Track is not yet analyzed. Wait for status=analyzed before searching for similar tracks."
+        )
+
+    query_vector = track.features.feature_vector
+    if not query_vector:
+        raise HTTPException(
+            status_code=400,
+            detail="Track has no feature vector. Re-upload and analyze the track."
+        )
+
+    # ── Hämta alla andra analyserade tracks ───────────────────────────────
+    candidates_result = await db.execute(
+        select(Track)
+        .where(Track.id != track_id, Track.status == "analyzed")
+        .options(selectinload(Track.features), selectinload(Track.classification))
+    )
+    candidates = candidates_result.scalars().all()
+
+    if not candidates:
+        return []
+
+    # Filtrera bort tracks utan feature_vector
+    valid = [
+        (t, t.features.feature_vector)
+        for t in candidates
+        if t.features and t.features.feature_vector
+    ]
+
+    if not valid:
+        return []
+
+    # ── Batch cosine similarity ───────────────────────────────────────────
+    tracks_list, vectors_list = zip(*valid)
+    scores = _batch_cosine_similarity(query_vector, list(vectors_list))
+
+    # Sortera fallande, applicera min_score-filter
+    ranked = sorted(
+        zip(tracks_list, scores.tolist()),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+
+    results = []
+    for t, score in ranked:
+        if score < min_score:
+            continue
+        if len(results) >= limit:
+            break
+        results.append(SimilarTrackResponse(
+            track_id=t.id,
+            title=t.title or t.original_filename,
+            genre=t.classification.genre if t.classification else None,
+            similarity_score=round(score, 4),
+        ))
+
+    log.info(
+        "similar_tracks_found",
+        query_id=str(track_id),
+        candidates=len(valid),
+        results=len(results),
+    )
+
+    return results
