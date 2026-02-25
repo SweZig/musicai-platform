@@ -21,7 +21,10 @@ minio==7.2.9
 librosa==0.10.2
 soundfile==0.12.1
 pydub==0.25.1
-numpy==1.26.4
+numpy==2.4.2
+
+# ── ML (Fas 2) ────────────────────────────────────
+scikit-learn==1.5.2
 
 # ── Utilities ────────────────────────────────────
 pydantic==2.9.2
@@ -31,7 +34,6 @@ aiofiles==24.1.0
 structlog==24.4.0
 
 # ── Fas 2+ (lägg till när modeller tränas) ────────
-# scikit-learn==1.5.2
 # torch==2.4.1
 # torchaudio==2.4.1
 # transformers==4.45.0
