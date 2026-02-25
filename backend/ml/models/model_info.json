@@ -1,9 +1,9 @@
 {
   "model_version": "rf-v1",
-  "trained_at": "2026-02-25T09:44:11.301272Z",
-  "accuracy": 0.6638888888888889,
-  "cv_accuracy_mean": 0.6627777777777778,
-  "cv_accuracy_std": 0.026270200927859762,
+  "trained_at": "2026-02-25T17:54:10.465110+00:00",
+  "accuracy": 0.725,
+  "cv_accuracy_mean": 0.7086934673366835,
+  "cv_accuracy_std": 0.026133479746631216,
   "genres": [
     "blues",
     "classical",
@@ -16,49 +16,49 @@
     "rock"
   ],
   "feature_dim": 48,
-  "n_samples": 1800,
-  "synthetic_data": true,
+  "n_samples": 999,
+  "synthetic_data": false,
   "top_features": [
     [
-      "zcr",
-      0.09009520714459007
-    ],
-    [
-      "danceability",
-      0.08310007663589679
+      "beat_strength",
+      0.056843282909731015
     ],
     [
       "energy",
-      0.08250471059079989
+      0.05057968850874136
     ],
     [
-      "bpm",
-      0.06196639071957686
-    ],
-    [
-      "beat_strength",
-      0.04730098959213167
-    ],
-    [
-      "spectral_centroid",
-      0.04446912763654888
-    ],
-    [
-      "spectral_rolloff",
-      0.03813165033371021
+      "spectral_contrast",
+      0.040650462515452804
     ],
     [
       "mfcc_mean_0",
-      0.035246087222567384
+      0.040640187300944645
     ],
     [
-      "mfcc_std_0",
-      0.03384335516396718
+      "mfcc_std_3",
+      0.03498937304978816
     ],
     [
-      "mfcc_mean_1",
-      0.03017677048296709
+      "spectral_bandwidth",
+      0.028916241397883777
+    ],
+    [
+      "mfcc_std_5",
+      0.028818388116064
+    ],
+    [
+      "mfcc_mean_3",
+      0.02863385703314703
+    ],
+    [
+      "mfcc_std_8",
+      0.024964003739537416
+    ],
+    [
+      "mfcc_std_4",
+      0.023408157924031853
     ]
   ],
-  "note": "Tr\u00e4nad p\u00e5 syntetisk data \u2014 ers\u00e4tt med GTZAN f\u00f6r produktionskvalitet."
+  "note": "Tr\u00e4nad p\u00e5 GTZAN-data."
 }

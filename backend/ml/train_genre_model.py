@@ -46,7 +46,7 @@ GTZAN_GENRES = [
     "jazz", "metal", "pop", "reggae", "rock"
 ]
 
-# Mapping GTZAN → våra genrenamn (i klassificeraren)
+# Mapping GTZAN -> våra genrenamn (i klassificeraren)
 GENRE_MAP = {
     "blues":     "blues",
     "classical": "classical",
@@ -86,10 +86,10 @@ def extract_features_from_file(filepath: str) -> Optional[np.ndarray]:
         if fv and len(fv) == FEATURE_DIM:
             return np.array(fv, dtype=np.float32)
         else:
-            print(f"  ⚠ Fel dimension: {len(fv) if fv else 'None'} (förväntat {FEATURE_DIM})")
+            print(f"  VARNING Fel dimension: {len(fv) if fv else 'None'} (förväntat {FEATURE_DIM})")
             return None
     except Exception as e:
-        print(f"  ✗ {Path(filepath).name}: {e}")
+        print(f"  FEL {Path(filepath).name}: {e}")
         return None
 
 
@@ -117,7 +117,7 @@ def load_gtzan(data_dir: str) -> tuple[np.ndarray, np.ndarray]:
 
         mapped_genre = GENRE_MAP.get(genre_name, genre_name)
         files = list(genre_dir.glob("*.wav")) + list(genre_dir.glob("*.mp3"))
-        print(f"\n{genre_name} → {mapped_genre} ({len(files)} filer)")
+        print(f"\n{genre_name} -> {mapped_genre} ({len(files)} filer)")
 
         for fpath in files:
             total += 1
@@ -130,7 +130,7 @@ def load_gtzan(data_dir: str) -> tuple[np.ndarray, np.ndarray]:
             else:
                 failed += 1
 
-    print(f"\n✓ Laddade {len(X)}/{total} filer ({failed} misslyckades)")
+    print(f"\nOK Laddade {len(X)}/{total} filer ({failed} misslyckades)")
     return np.array(X, dtype=np.float32), np.array(y)
 
 
@@ -251,7 +251,7 @@ def generate_synthetic_data(n_per_genre: int = 200) -> tuple[np.ndarray, np.ndar
         for _ in range(n_per_genre):
             X.append(_synthetic_vector(profile))
             y.append(genre)
-    print(f"✓ Genererade {len(X)} syntetiska samples ({len(GENRE_PROFILES)} genrer, {n_per_genre}/genre)")
+    print(f"OK Genererade {len(X)} syntetiska samples ({len(GENRE_PROFILES)} genrer, {n_per_genre}/genre)")
     return np.array(X, dtype=np.float32), np.array(y)
 
 
@@ -296,7 +296,7 @@ def train_model(X: np.ndarray, y: np.ndarray, synthetic: bool = False) -> dict:
     t0 = time.time()
     model.fit(X_train, y_train)
     elapsed = time.time() - t0
-    print(f"✓ Färdig på {elapsed:.1f}s")
+    print(f"OK Färdig på {elapsed:.1f}s")
 
     # Utvärdering
     y_pred = model.predict(X_test)
@@ -350,7 +350,7 @@ def save_model(result: dict):
 
     with open(MODEL_PATH, "wb") as f:
         pickle.dump(result["model"], f, protocol=5)
-    print(f"\n✓ Modell sparad: {MODEL_PATH}")
+    print(f"\nOK Modell sparad: {MODEL_PATH}")
 
     info = {
         "model_version": "rf-v1",
@@ -371,7 +371,7 @@ def save_model(result: dict):
     }
     with open(INFO_PATH, "w") as f:
         json.dump(info, f, indent=2)
-    print(f"✓ Metadata sparad: {INFO_PATH}")
+    print(f"OK Metadata sparad: {INFO_PATH}")
 
     print(f"\n{'='*50}")
     print(f"SAMMANFATTNING")
@@ -382,7 +382,7 @@ def save_model(result: dict):
     print(f"{'='*50}\n")
 
     if result["synthetic"]:
-        print("⚠  VARNING: Modellen är tränad på syntetisk data.")
+        print("VARNING  VARNING: Modellen är tränad på syntetisk data.")
         print("   Träffsäkerheten på riktiga låtar kan vara låg.")
         print("   Ladda ner GTZAN och kör om för produktionsbruk:\n")
         print("   kaggle datasets download -d andradaolteanu/gtzan-dataset-music-genre-classification")
@@ -414,7 +414,7 @@ def main():
     # Välj datakälla
     if args.data_dir:
         if not os.path.isdir(args.data_dir):
-            print(f"✗ Katalogen finns inte: {args.data_dir}")
+            print(f"FEL Katalogen finns inte: {args.data_dir}")
             sys.exit(1)
         print(f"Laddar {args.format.upper()}-data från: {args.data_dir}")
         X, y = load_gtzan(args.data_dir)
@@ -442,7 +442,7 @@ def main():
             synthetic = True
 
     if len(X) == 0:
-        print("✗ Inga features extraherades. Kontrollera datakatalogen.")
+        print("FEL Inga features extraherades. Kontrollera datakatalogen.")
         sys.exit(1)
 
     result = train_model(X, y, synthetic=synthetic)
