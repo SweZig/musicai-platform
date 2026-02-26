@@ -479,7 +479,7 @@ function SimilarCard({ track, onClick }) {
   )
 }
 
-function TrackDetail({ track, onSelectTrack, reanalyzing }) {
+function TrackDetail({ track, onSelectTrack, reanalyzing, onReanalyzeFile }) {
   const [similar, setSimilar] = useState(null)
   const [loadingSimilar, setLoadingSimilar] = useState(false)
 
@@ -504,10 +504,16 @@ function TrackDetail({ track, onSelectTrack, reanalyzing }) {
           <div className="detail-title">{shortName(track.title || track.original_filename)}</div>
           <label
             className={"reanalyze-btn" + (reanalyzing ? " disabled" : "")}
-            htmlFor="reanalyze-input"
             style={{ cursor: reanalyzing ? 'not-allowed' : 'pointer' }}
           >
             {reanalyzing ? <><span className="spinner" /> Analyserar...</> : '↻ Re-analysera'}
+            <input
+              type="file"
+              accept=".wav,.mp3,.flac,.aiff,.aif,.ogg"
+              onChange={e => { onReanalyzeFile(e.target.files); e.target.value = ''; }}
+              style={{ display: 'none' }}
+              disabled={reanalyzing}
+            />
           </label>
         </div>
         <div className="detail-subtitle">
@@ -759,13 +765,7 @@ export default function App() {
                 accept=".wav,.mp3,.flac,.aiff,.aif,.ogg"
                 onChange={e => handleFiles(e.target.files)}
               />
-            <input
-              id="reanalyze-input"
-              type="file"
-              accept=".wav,.mp3,.flac,.aiff,.aif,.ogg"
-              onChange={e => handleReanalyzeFile(e.target.files)}
-              style={{ display: 'none' }}
-            />
+
 
             </div>
             {uploading && (
@@ -817,6 +817,7 @@ export default function App() {
               track={selected}
               onSelectTrack={selectTrack}
               reanalyzing={reanalyzing}
+              onReanalyzeFile={handleReanalyzeFile}
             />
           ) : (
             <div className="empty-state">
