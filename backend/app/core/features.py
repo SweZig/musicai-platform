@@ -81,8 +81,21 @@ def _detect_key(chroma_mean):
     min_corr = float(np.corrcoef(roll_min_norm, cm_norm)[0,1])
 
     if tonic_dominance >= 0.05:
-        # Tonic-first: grundton är klar, välj bara major/minor
-        is_major = maj_corr > min_corr
+        # Tonic-first: grundton är klar
+        # Avgör major/minor via direkt jämförelse av terser i chroma
+        # Mer robust än KS-korrelation för elektronisk musik
+        minor_third_idx = (tonic_idx + 3) % 12   # liten ters = minor
+        major_third_idx = (tonic_idx + 4) % 12   # stor ters = major
+        minor_third_val = float(cm[minor_third_idx])
+        major_third_val = float(cm[major_third_idx])
+
+        if abs(minor_third_val - major_third_val) > 0.01:
+            # Klar skillnad i terserna — välj direkt
+            is_major = major_third_val > minor_third_val
+        else:
+            # Terserna är lika starka — fall tillbaka på KS
+            is_major = maj_corr > min_corr
+
         conf = round(max(maj_corr, min_corr), 3)
         return tonic_idx, is_major, conf
     else:
