@@ -54,18 +54,45 @@ def _get_full_duration(raw_bytes: bytes) -> float:
 
 
 def _detect_key(chroma_mean):
-    """Krumhansl-Schmuckler key profiles med normalisering."""
+    """
+    Tonic-first key detection:
+    1. Starkaste chroma-noten är grundtonen (reliabelt i elektronisk musik)
+    2. Krumhansl-Schmuckler avgör major/minor för den grundtonen
+    3. Fallback: KS väljer grundton om tonic-first confidence är låg
+    """
     major = np.array([6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88])
     minor = np.array([6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17])
-    cm = np.array(chroma_mean, dtype=float) - np.mean(chroma_mean)
-    major = major - major.mean()
-    minor = minor - minor.mean()
-    mc = [float(np.corrcoef(np.roll(major,-i), cm)[0,1]) for i in range(12)]
-    nc = [float(np.corrcoef(np.roll(minor,-i), cm)[0,1]) for i in range(12)]
-    bm, bn = int(np.argmax(mc)), int(np.argmax(nc))
-    if mc[bm] >= nc[bn]:
-        return bm, True,  round(mc[bm], 3)
-    return bn, False, round(nc[bn], 3)
+
+    cm = np.array(chroma_mean, dtype=float)
+
+    # Tonic-first: starkaste noten är grundtonen
+    tonic_idx = int(np.argmax(cm))
+    tonic_strength = float(cm[tonic_idx])
+    second_strength = float(np.sort(cm)[-2])
+    tonic_dominance = tonic_strength - second_strength  # hur mycket starkare är grundtonen
+
+    # Major/minor via KS för den antagna grundtonen
+    roll_maj = np.roll(major, -tonic_idx)
+    roll_min = np.roll(minor, -tonic_idx)
+    cm_norm = cm - cm.mean()
+    roll_maj_norm = roll_maj - roll_maj.mean()
+    roll_min_norm = roll_min - roll_min.mean()
+    maj_corr = float(np.corrcoef(roll_maj_norm, cm_norm)[0,1])
+    min_corr = float(np.corrcoef(roll_min_norm, cm_norm)[0,1])
+
+    if tonic_dominance >= 0.05:
+        # Tonic-first: grundton är klar, välj bara major/minor
+        is_major = maj_corr > min_corr
+        conf = round(max(maj_corr, min_corr), 3)
+        return tonic_idx, is_major, conf
+    else:
+        # Fallback KS: ingen klar grundton, låt korrelationen avgöra
+        mc = [float(np.corrcoef((np.roll(major,-i) - major.mean()), cm_norm)[0,1]) for i in range(12)]
+        nc = [float(np.corrcoef((np.roll(minor,-i) - minor.mean()), cm_norm)[0,1]) for i in range(12)]
+        bm, bn = int(np.argmax(mc)), int(np.argmax(nc))
+        if mc[bm] >= nc[bn]:
+            return bm, True, round(mc[bm], 3)
+        return bn, False, round(nc[bn], 3)
 
 
 def _chords(chroma_frames, key_idx, is_major=True):
@@ -216,39 +243,19 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
         tuning = 0.0
         log.warning("tuning_fallback", error=str(e))
 
-    # Key detection — ren chroma_cqt utan preprocessing, diagnostik-loggning
-    # bins_per_octave=12 är mer stabil än 36 för korrelationsbaserad key-detection
-    seg_len = len(y_key) // 3
-    votes: dict[tuple, float] = {}
-    for i in range(3):
-        seg = y_key[i*seg_len:(i+1)*seg_len]
-        cqt = librosa.feature.chroma_cqt(
-            y=seg, sr=sr_key,
-            bins_per_octave=12, hop_length=HOP_LEN,
-            fmin=librosa.note_to_hz('C1'), tuning=tuning,
-            norm=np.inf,
-        )
-        chroma_mean_seg = cqt.mean(axis=1)
-        k_idx, k_major, k_conf = _detect_key(chroma_mean_seg)
-        key_tuple = (k_idx, k_major)
-        votes[key_tuple] = votes.get(key_tuple, 0.0) + k_conf
-
-    # Välj tonart med högst samlad confidence
-    best_key = max(votes, key=lambda t: votes[t])
-    key_idx, is_major = best_key
-    key_conf = round(votes[best_key] / 3, 3)
-    log.info("key_votes", votes={f"{KEYS[k]}_{'maj' if m else 'min'}": round(v,3) for (k,m),v in votes.items()})
-
-    # Logga chroma-profil för diagnostik (vilka noter dominerar)
+    # Key detection — full-file chroma, tonic-first
+    # Segmentvoting skapar brus; hela filens chroma ger stabilare tonic
     chroma_cqt = librosa.feature.chroma_cqt(
         y=y_key, sr=sr_key,
         bins_per_octave=12, hop_length=HOP_LEN,
         fmin=librosa.note_to_hz('C1'), tuning=tuning,
-        norm=np.inf,
     )
     chroma_full_mean = chroma_cqt.mean(axis=1)
     top3_idx = np.argsort(chroma_full_mean)[::-1][:3]
     log.info("chroma_top3", notes={KEYS[int(i)]: round(float(chroma_full_mean[i]),3) for i in top3_idx})
+
+    key_idx, is_major, key_conf = _detect_key(chroma_full_mean)
+    log.info("key_result", key=KEYS[key_idx], scale="maj" if is_major else "min", conf=key_conf)
 
     chroma_cens = librosa.feature.chroma_cens(C=chroma_cqt, bins_per_octave=12)
 
