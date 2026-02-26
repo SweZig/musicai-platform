@@ -55,57 +55,49 @@ def _get_full_duration(raw_bytes: bytes) -> float:
 
 def _detect_key(chroma_mean):
     """
-    Tonic-first key detection:
-    1. Starkaste chroma-noten är grundtonen (reliabelt i elektronisk musik)
-    2. Krumhansl-Schmuckler avgör major/minor för den grundtonen
-    3. Fallback: KS väljer grundton om tonic-first confidence är låg
+    Key detection via cosine similarity mot alla 24 key-profiler (Krumhansl-Schmuckler).
+
+    Förbättringar vs. tidigare implementation:
+    - Cosine similarity (dot product med normalisering) i stället för Pearson-korrelation.
+      Pearson mean-centrerar och tappar absolut amplitudinformation vilket ger negativa
+      confidence och fel tonart vid ackordprogressioner.
+    - Korrekt roll-riktning: np.roll(profile, +i) sätter root-vikten på rätt postion.
+      np.roll(minor, +9)[9] = minor[0] = 6.33 (root) ← korrekt.
+      np.roll(minor, -9)[9] = minor[6] = 2.54          ← fel (gammal kod).
+    - Tonic-first ters-jämförelse som tiebreaker för elektronisk musik:
+      om cosine och argmax är överens om grundton, bekräfta major/minor
+      via minor third vs major third i chroma.
     """
     major = np.array([6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88])
     minor = np.array([6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17])
 
     cm = np.array(chroma_mean, dtype=float)
+    cm_norm = cm / (np.linalg.norm(cm) + 1e-8)
 
-    # Tonic-first: starkaste noten är grundtonen
+    # Steg 1: Hitta bästa tonart via cosine similarity (alla 24 keys)
+    best_key, best_maj, best_score = 0, True, -np.inf
+    for i in range(12):
+        for profile, is_major in [(major, True), (minor, False)]:
+            prof = np.roll(profile, i)   # +i är korrekt! (inte -i)
+            prof_norm = prof / np.linalg.norm(prof)
+            score = float(np.dot(prof_norm, cm_norm))
+            if score > best_score:
+                best_score, best_key, best_maj = score, i, is_major
+
+    # Steg 2: Tonic-first tiebreaker
+    # Om cosine och chroma argmax är överens om grundton → ters-jämförelse
+    # för mer robust major/minor avgörande (fungerar bra för elektronisk musik
+    # med tydlig bassnoter).
     tonic_idx = int(np.argmax(cm))
-    tonic_strength = float(cm[tonic_idx])
-    second_strength = float(np.sort(cm)[-2])
-    tonic_dominance = tonic_strength - second_strength  # hur mycket starkare är grundtonen
+    tonic_dominance = float(cm[tonic_idx]) - float(np.sort(cm)[-2])
 
-    # Major/minor via KS för den antagna grundtonen
-    roll_maj = np.roll(major, -tonic_idx)
-    roll_min = np.roll(minor, -tonic_idx)
-    cm_norm = cm - cm.mean()
-    roll_maj_norm = roll_maj - roll_maj.mean()
-    roll_min_norm = roll_min - roll_min.mean()
-    maj_corr = float(np.corrcoef(roll_maj_norm, cm_norm)[0,1])
-    min_corr = float(np.corrcoef(roll_min_norm, cm_norm)[0,1])
-
-    if tonic_dominance >= 0.05:
-        # Tonic-first: grundton är klar
-        # Avgör major/minor via direkt jämförelse av terser i chroma
-        # Mer robust än KS-korrelation för elektronisk musik
-        minor_third_idx = (tonic_idx + 3) % 12   # liten ters = minor
-        major_third_idx = (tonic_idx + 4) % 12   # stor ters = major
-        minor_third_val = float(cm[minor_third_idx])
-        major_third_val = float(cm[major_third_idx])
-
+    if best_key == tonic_idx and tonic_dominance >= 0.05:
+        minor_third_val = float(cm[(tonic_idx + 3) % 12])
+        major_third_val = float(cm[(tonic_idx + 4) % 12])
         if abs(minor_third_val - major_third_val) > 0.01:
-            # Klar skillnad i terserna — välj direkt
-            is_major = major_third_val > minor_third_val
-        else:
-            # Terserna är lika starka — fall tillbaka på KS
-            is_major = maj_corr > min_corr
+            best_maj = major_third_val > minor_third_val
 
-        conf = round(max(maj_corr, min_corr), 3)
-        return tonic_idx, is_major, conf
-    else:
-        # Fallback KS: ingen klar grundton, låt korrelationen avgöra
-        mc = [float(np.corrcoef((np.roll(major,-i) - major.mean()), cm_norm)[0,1]) for i in range(12)]
-        nc = [float(np.corrcoef((np.roll(minor,-i) - minor.mean()), cm_norm)[0,1]) for i in range(12)]
-        bm, bn = int(np.argmax(mc)), int(np.argmax(nc))
-        if mc[bm] >= nc[bn]:
-            return bm, True, round(mc[bm], 3)
-        return bn, False, round(nc[bn], 3)
+    return best_key, best_maj, round(best_score, 3)
 
 
 def _chords(chroma_frames, key_idx, is_major=True):
