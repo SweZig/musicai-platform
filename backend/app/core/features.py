@@ -373,15 +373,22 @@ def _combine_key_estimates(
     sorted_s = np.sort(scores)[::-1]
     margin   = float((sorted_s[0] - sorted_s[1]) / (sorted_s[0] + 1e-8))
 
-    # Tie-breaker: when ensemble margin < 0.15 AND chroma cosine < 0.90
-    # (indicating the chroma signal is ambiguous), and harmonic disagrees with
-    # the current winner, override with harmonic.
-    # Guard: chroma_result[2] >= 0.90 → chroma is authoritative, do NOT override.
-    # Rationale: chroma cosine suffers from semitone bleed (F vs F# adjacent bins),
-    # causing E_min to beat A_min even when F natural is present (F∈A_min, F∉E_min).
-    # Harmonic chord analysis is immune to single-semitone bleed.
-    chroma_cosine = chroma_result[2]
-    if margin < 0.15 and chroma_cosine < 0.90 and harmonic_result is not None:
+    # Tie-breaker: when ensemble margin < 0.15 and harmonic disagrees with winner,
+    # and harmonic has sufficient confidence (≥ 0.25), override with harmonic.
+    #
+    # Rationale: chroma cosine picks up chromatic bleed between adjacent semitone
+    # bins (e.g. F vs F#). E_min has cosine ≥ 0.90 when E is the dominant note,
+    # but F natural (present in A_min, absent in E_min) is misread as F#-bleed
+    # and does not lower the E_min cosine enough to be decisive. Harmonic chord
+    # analysis evaluates actual chord identities and is immune to this bleed.
+    #
+    # Guard: harmonic_conf < 0.25 means the harmonic analysis has no clear winner
+    # and should not override. This prevents noise from corrupting stable detections.
+    if (
+        margin < 0.15
+        and harmonic_result is not None
+        and harmonic_result[2] >= 0.25
+    ):
         hk, hm = harmonic_result[0], harmonic_result[1]
         if (hk != key_result) or (hm != is_major_result):
             key_result      = hk
