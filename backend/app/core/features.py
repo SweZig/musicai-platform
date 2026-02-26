@@ -338,7 +338,10 @@ def _combine_key_estimates(
 
     Structural weights (rationale in comments):
       Chroma   1.0 — always active; good tonal balance, poor on relative keys
-      Harmonic 2.0 — active when chords available; knows which chords appear
+      Harmonic 3.0 — active when chords available; knows which chords appear
+                     Weight raised to 3.0: when chroma has a single very dominant
+                     note (e.g. A=0.923) cosine similarity reaches ~0.95, which at
+                     weight 2.0 beat a correct harmonic signal of conf~0.45.
       Melodic  3.0 * melody_weight — strongest signal but requires clear melody
 
     Returns (key_idx, is_major, margin_confidence 0..1).
@@ -355,7 +358,7 @@ def _combine_key_estimates(
 
     # Method 2 — when harmonic analysis succeeded
     if harmonic_result is not None:
-        cast_vote(*harmonic_result[:3], weight=2.0)
+        cast_vote(*harmonic_result[:3], weight=3.0)
 
     # Method 3 — when sufficient melodic content exists
     if melody_result is not None:
