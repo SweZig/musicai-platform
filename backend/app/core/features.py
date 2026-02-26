@@ -207,8 +207,8 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     f["bpm"]        = round(bpm_val, 1)
     f["beat_count"] = int(len(beats))
 
-    # Key / Camelot — multi-segment voting för robust tonart-detektering
-    # Delar upp y_key i 3 segment och röstar fram vinnande tonart
+    # Key / Camelot — HPSS + multi-segment voting för robust tonart-detektering
+    # HPSS separerar harmoniskt ljud från trummor innan chroma-analys
     try:
         tuning = float(librosa.estimate_tuning(y=y_key, sr=sr_key))
         log.info("tuning_estimated", tuning_cents=round(tuning*100, 1))
@@ -216,10 +216,13 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
         tuning = 0.0
         log.warning("tuning_fallback", error=str(e))
 
-    seg_len = len(y_key) // 3
+    # Separera harmoniskt ljud — kick/snare förstör annars chroma-analys
+    y_harm, _ = librosa.effects.hpss(y_key, margin=3.0)
+
+    seg_len = len(y_harm) // 3
     votes: dict[tuple, float] = {}
     for i in range(3):
-        seg = y_key[i*seg_len:(i+1)*seg_len]
+        seg = y_harm[i*seg_len:(i+1)*seg_len]
         cqt = librosa.feature.chroma_cqt(
             y=seg, sr=sr_key,
             bins_per_octave=36, hop_length=HOP_LEN,
@@ -236,9 +239,9 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     key_conf = round(votes[best_key] / 3, 3)
     log.info("key_votes", votes={f"{KEYS[k]}_{'maj' if m else 'min'}": round(v,3) for (k,m),v in votes.items()})
 
-    # Fallback: full chroma om bara ett segment vann
+    # Full chroma (harmonisk) för chord-detektering
     chroma_cqt  = librosa.feature.chroma_cqt(
-        y=y_key, sr=sr_key,
+        y=y_harm, sr=sr_key,
         bins_per_octave=36, hop_length=HOP_LEN,
         fmin=librosa.note_to_hz('C1'), tuning=tuning,
     )
