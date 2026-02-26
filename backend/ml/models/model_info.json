@@ -1,9 +1,9 @@
 {
   "model_version": "rf-v1",
-  "trained_at": "2026-02-25T22:25:22.481898+00:00",
-  "accuracy": 0.8,
-  "cv_accuracy_mean": 0.8000500625782226,
-  "cv_accuracy_std": 0.014496034257237934,
+  "trained_at": "2026-02-26T00:02:52.393850+00:00",
+  "accuracy": 0.728,
+  "cv_accuracy_mean": 0.728981981981982,
+  "cv_accuracy_std": 0.012044751679049982,
   "genres": [
     "blues",
     "classical",
@@ -16,49 +16,49 @@
     "rock"
   ],
   "feature_dim": 48,
-  "n_samples": 3996,
+  "n_samples": 4996,
   "synthetic_data": false,
   "top_features": [
     [
-      "beat_strength",
-      0.053777266871968536
+      "energy",
+      0.05614229863327833
     ],
     [
-      "energy",
-      0.05204135707154429
+      "beat_strength",
+      0.04927834682684716
     ],
     [
       "mfcc_mean_0",
-      0.04605867877250612
+      0.04901863924974575
     ],
     [
       "mfcc_std_3",
-      0.03723588259448458
-    ],
-    [
-      "mfcc_std_4",
-      0.030535510068677517
-    ],
-    [
-      "spectral_rolloff",
-      0.029998531197092296
+      0.03488942713085986
     ],
     [
       "spectral_bandwidth",
-      0.029038240182675333
+      0.02752906082667665
+    ],
+    [
+      "mfcc_std_4",
+      0.027200106961358356
     ],
     [
       "mfcc_std_5",
-      0.028169465708361784
+      0.026354071161035632
     ],
     [
-      "spectral_centroid",
-      0.024163004754627262
+      "spectral_rolloff",
+      0.025431305308728263
     ],
     [
       "mfcc_mean_2",
-      0.023988431671641244
+      0.024958478837516104
+    ],
+    [
+      "mfcc_std_2",
+      0.024773820309557344
     ]
   ],
-  "note": "Tr\u00e4nad p\u00e5 GTZAN-data."
+  "note": "Tr\u00e4nad p\u00e5 4996 samples (GTZAN+FMA+augmentering)."
 }
