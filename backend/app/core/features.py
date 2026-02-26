@@ -216,20 +216,25 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
         tuning = 0.0
         log.warning("tuning_fallback", error=str(e))
 
-    # Separera harmoniskt ljud — kick/snare förstör annars chroma-analys
-    y_harm, _ = librosa.effects.hpss(y_key, margin=3.0)
+    # Bass-boost: lågpassfilter för att betona basslinjen (viktigast för tonart)
+    # I elektronisk musik är basnoten det primära tonala ankaret
+    from scipy.signal import butter, sosfilt
+    sos = butter(4, 300.0 / (sr_key / 2), btype='low', output='sos')
+    y_bass = sosfilt(sos, y_key)
+    # Blanda original + förstärkt bas (70% orig + 30% extra bas)
+    y_tonal = 0.7 * y_key + 0.3 * (y_bass * 3.0)
+    y_tonal = y_tonal / (np.max(np.abs(y_tonal)) + 1e-8)  # normalisera
 
-    seg_len = len(y_harm) // 3
+    seg_len = len(y_tonal) // 3
     votes: dict[tuple, float] = {}
     for i in range(3):
-        seg = y_harm[i*seg_len:(i+1)*seg_len]
+        seg = y_tonal[i*seg_len:(i+1)*seg_len]
         cqt = librosa.feature.chroma_cqt(
             y=seg, sr=sr_key,
             bins_per_octave=36, hop_length=HOP_LEN,
             fmin=librosa.note_to_hz('C1'), tuning=tuning,
         )
-        cens = librosa.feature.chroma_cens(C=cqt, bins_per_octave=36)
-        k_idx, k_major, k_conf = _detect_key(cens.mean(axis=1))
+        k_idx, k_major, k_conf = _detect_key(cqt.mean(axis=1))
         key_tuple = (k_idx, k_major)
         votes[key_tuple] = votes.get(key_tuple, 0.0) + k_conf
 
@@ -239,9 +244,9 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     key_conf = round(votes[best_key] / 3, 3)
     log.info("key_votes", votes={f"{KEYS[k]}_{'maj' if m else 'min'}": round(v,3) for (k,m),v in votes.items()})
 
-    # Full chroma (harmonisk) för chord-detektering
+    # Full chroma för chord-detektering
     chroma_cqt  = librosa.feature.chroma_cqt(
-        y=y_harm, sr=sr_key,
+        y=y_tonal, sr=sr_key,
         bins_per_octave=36, hop_length=HOP_LEN,
         fmin=librosa.note_to_hz('C1'), tuning=tuning,
     )
