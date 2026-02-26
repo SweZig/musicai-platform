@@ -18,8 +18,7 @@ N_MFCC       = 13
 HOP_LEN      = 1024
 N_FFT        = 2048
 ANALYSIS_DUR = 60   # seconds of audio used for spectral/rhythm analysis
-SR           = 16000  # snabb analys för MFCC, spectral, beats
-SR_KEY       = 22050  # bara för chroma_cqt / key+chord (laddas separat)
+SR           = 16000
 
 CAMELOT = {
     (0,True):"8B",(1,True):"3B",(2,True):"10B",(3,True):"5B",(4,True):"12B",(5,True):"7B",
@@ -54,102 +53,26 @@ def _get_full_duration(raw_bytes: bytes) -> float:
 
 
 def _detect_key(chroma_mean):
-    """
-    Krumhansl-Schmuckler key profiles.
-    Använder chroma_cqt-baserat input för bättre noggrannhet.
-    """
-    # Krumhansl-Schmuckler key profiles
-    major = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09,
-                      2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-    minor = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53,
-                      2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
-    # Normalize chroma
-    cm = np.array(chroma_mean, dtype=float)
-    cm = cm - cm.mean()
-    major = major - major.mean()
-    minor = minor - minor.mean()
-
-    mc = [float(np.corrcoef(np.roll(major, -i), cm)[0, 1]) for i in range(12)]
-    nc = [float(np.corrcoef(np.roll(minor, -i), cm)[0, 1]) for i in range(12)]
+    major = np.array([6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88])
+    minor = np.array([6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17])
+    mc = [float(np.corrcoef(np.roll(major,-i), chroma_mean)[0,1]) for i in range(12)]
+    nc = [float(np.corrcoef(np.roll(minor,-i), chroma_mean)[0,1]) for i in range(12)]
     bm, bn = int(np.argmax(mc)), int(np.argmax(nc))
     if mc[bm] >= nc[bn]:
         return bm, True,  round(mc[bm], 3)
     return bn, False, round(nc[bn], 3)
 
 
-def _detect_key_from_audio(y, sr):
-    """
-    Beräknar chroma_cqt direkt från audio för bättre key-detektering.
-    chroma_cqt är överlägset chroma_stft för tonhöjd/key.
-    """
-    import librosa
-    try:
-        chroma_cqt = librosa.feature.chroma_cqt(y=y, sr=sr, bins_per_octave=36)
-        return chroma_cqt.mean(axis=1)
-    except Exception:
-        # fallback till stft
-        chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LEN)
-        return chroma_stft.mean(axis=1)
-
-
-def _chords(chroma_cqt_frames, key_idx):
-    """
-    Förbättrad ackord-detektering med template matching.
-    Analyserar chroma frame-för-frame och hittar de vanligaste ackorden.
-    """
-    # Ackord-templates: major, minor, dominant7 triads
-    def make_template(root, quality):
-        t = np.zeros(12)
-        if quality == 'maj':
-            for interval in [0, 4, 7]:
-                t[(root + interval) % 12] = 1.0
-        elif quality == 'min':
-            for interval in [0, 3, 7]:
-                t[(root + interval) % 12] = 1.0
-        return t
-
-    # Bygg templates för alla 12 keys × major + minor = 24 ackord
-    templates = {}
-    for r in range(12):
-        templates[(r, 'maj')] = make_template(r, 'maj')
-        templates[(r, 'min')] = make_template(r, 'min')
-
-    # Normalisera chroma frames
-    frames = chroma_cqt_frames.T  # shape: (frames, 12)
-    norms = np.linalg.norm(frames, axis=1, keepdims=True)
-    frames = frames / (norms + 1e-8)
-
-    # Matcha varje frame mot alla templates
-    chord_votes = {}
-    for (root, quality), tmpl in templates.items():
-        tmpl_norm = tmpl / (np.linalg.norm(tmpl) + 1e-8)
-        scores = frames @ tmpl_norm  # dot product per frame
-        chord_votes[(root, quality)] = float(scores.mean())
-
-    # Sortera efter genomsnittlig likhet
-    sorted_chords = sorted(chord_votes.items(), key=lambda x: -x[1])
-    top4 = sorted_chords[:4]
-
-    # Bygg chord-lista
-    chord_list = []
-    for (root, quality), score in top4:
-        interval = (root - key_idx) % 12
-        chord_list.append({
-            "chord": KEYS[root] + ("m" if quality == 'min' else ""),
-            "function": NUMERAL.get(interval, "?"),
-            "score": round(score, 3)
-        })
-
-    # Matcha mot common progressions baserat på top-ackord intervall
-    intervals = [(c[0] - key_idx) % 12 for c, _ in top4]
+def _chords(chroma_mean, key_idx):
+    top       = np.argsort(chroma_mean)[::-1][:4]
+    intervals = sorted(int(n - key_idx) % 12 for n in top)
     best, best_score = "I-IV-V", 0
     for name, pattern in COMMON_PROGRESSIONS.items():
         score = sum(1 for p in pattern if p in intervals)
         if score > best_score:
             best_score, best = score, name
-
-    funcs = " — ".join(NUMERAL.get(i, "?") for i in intervals[:4])
-    return best, funcs, chord_list
+    chords = [{"chord": KEYS[(key_idx+i)%12], "function": NUMERAL.get(i,"?")} for i in intervals]
+    return best, " — ".join(NUMERAL.get(i,"?") for i in intervals), chords
 
 
 def _structure(full_duration: float, bpm: float) -> list:
@@ -190,14 +113,10 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     full_duration = _get_full_duration(raw_bytes)
     log.info("duration_detected", full_duration=round(full_duration, 2) if full_duration else "unknown")
 
-    # ── Pass 2: load analysis window (SR=16000 för snabb analys) ─────────
+    # ── Pass 2: load analysis window ──────────────────────────────────────
     buf = io.BytesIO(raw_bytes)
     y, sr = librosa.load(buf, sr=SR, mono=True, duration=ANALYSIS_DUR)
     analysis_duration = len(y) / sr
-
-    # ── Pass 2b: ladda 30 sek vid SR_KEY=22050 för key/chord-detektering ──
-    buf_key = io.BytesIO(raw_bytes)
-    y_key, sr_key = librosa.load(buf_key, sr=SR_KEY, mono=True, duration=30)
 
     # If soundfile failed (e.g. MP3 edge case), fall back to librosa's duration
     if full_duration is None:
@@ -208,25 +127,31 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
 
     f: dict[str, Any] = {}
 
-    # BPM
-    tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LEN)
-    f["bpm"]        = round(float(np.squeeze(tempo)), 2)
+    # BPM — använder onset_strength för stabilare tempo-estimering
+    onset_env_bpm = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP_LEN)
+    tempo_arr = librosa.beat.tempo(onset_envelope=onset_env_bpm, sr=sr, hop_length=HOP_LEN, aggregate=None)
+    tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LEN, onset_envelope=onset_env_bpm)
+    # Välj median av local tempo estimates för mer robust BPM
+    if len(tempo_arr) > 0:
+        bpm_val = float(np.median(tempo_arr))
+    else:
+        bpm_val = float(np.squeeze(tempo))
+    f["bpm"]        = round(bpm_val, 1)
     f["beat_count"] = int(len(beats))
 
-    # Key / Camelot — använder chroma_cqt vid SR_KEY=22050 för bättre noggrannhet
-    chroma_cqt  = librosa.feature.chroma_cqt(y=y_key, sr=sr_key, bins_per_octave=36, hop_length=HOP_LEN)
-    chroma_mean = chroma_cqt.mean(axis=1)
+    # Key / Camelot
+    chroma      = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LEN)
+    chroma_mean = chroma.mean(axis=1)
     key_idx, is_major, key_conf = _detect_key(chroma_mean)
     f["key"]            = KEYS[key_idx]
     f["scale"]          = "major" if is_major else "minor"
     f["key_confidence"] = key_conf
     f["camelot"]        = CAMELOT.get((key_idx, is_major), "?")
 
-    # MFCC + Chroma stats (chroma_stft för feature_vector — konsistent med träning)
-    chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LEN)
+    # MFCC + Chroma stats
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LEN)
     f["mfcc_stats"]   = {"mean": mfcc.mean(axis=1).tolist(), "std": mfcc.std(axis=1).tolist()}
-    f["chroma_stats"] = {"mean": chroma_stft.mean(axis=1).tolist(), "std": chroma_stft.std(axis=1).tolist()}
+    f["chroma_stats"] = {"mean": chroma_mean.tolist(),       "std": chroma.std(axis=1).tolist()}
 
     # Spectral
     f["spectral_centroid_mean"]  = round(float(librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=HOP_LEN).mean()), 2)
@@ -264,8 +189,8 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     f["rhythmic_complexity"] = round(float(np.clip(-np.sum(hist * np.log2(hist + 1e-8)) / np.log2(20), 0, 1)), 3)
     f["groove_feel"]         = "swung" if f["swing_ratio"] > 1.15 else "straight" if f["swing_ratio"] < 0.9 else "even"
 
-    # Chords — skickar chroma_cqt frames för bättre ackord-detektering
-    prog, funcs, chords = _chords(chroma_cqt, key_idx)
+    # Chords
+    prog, funcs, chords = _chords(chroma_mean, key_idx)
     f["chord_progression"]  = prog
     f["harmonic_functions"] = funcs
     f["chords"]             = chords
