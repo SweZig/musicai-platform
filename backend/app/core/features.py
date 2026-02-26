@@ -18,7 +18,8 @@ N_MFCC       = 13
 HOP_LEN      = 1024
 N_FFT        = 2048
 ANALYSIS_DUR = 60   # seconds of audio used for spectral/rhythm analysis
-SR           = 16000
+SR           = 16000  # snabb analys för MFCC, spectral
+SR_KEY       = 22050  # BPM + key/chord (laddas separat)
 
 CAMELOT = {
     (0,True):"8B",(1,True):"3B",(2,True):"10B",(3,True):"5B",(4,True):"12B",(5,True):"7B",
@@ -53,26 +54,72 @@ def _get_full_duration(raw_bytes: bytes) -> float:
 
 
 def _detect_key(chroma_mean):
+    """Krumhansl-Schmuckler key profiles med normalisering."""
     major = np.array([6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88])
     minor = np.array([6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17])
-    mc = [float(np.corrcoef(np.roll(major,-i), chroma_mean)[0,1]) for i in range(12)]
-    nc = [float(np.corrcoef(np.roll(minor,-i), chroma_mean)[0,1]) for i in range(12)]
+    cm = np.array(chroma_mean, dtype=float) - np.mean(chroma_mean)
+    major = major - major.mean()
+    minor = minor - minor.mean()
+    mc = [float(np.corrcoef(np.roll(major,-i), cm)[0,1]) for i in range(12)]
+    nc = [float(np.corrcoef(np.roll(minor,-i), cm)[0,1]) for i in range(12)]
     bm, bn = int(np.argmax(mc)), int(np.argmax(nc))
     if mc[bm] >= nc[bn]:
         return bm, True,  round(mc[bm], 3)
     return bn, False, round(nc[bn], 3)
 
 
-def _chords(chroma_mean, key_idx):
-    top       = np.argsort(chroma_mean)[::-1][:4]
-    intervals = sorted(int(n - key_idx) % 12 for n in top)
-    best, best_score = "I-IV-V", 0
-    for name, pattern in COMMON_PROGRESSIONS.items():
+def _chords(chroma_frames, key_idx, is_major=True):
+    """Template matching mot 24 ackord (12 maj + 12 min), tar hänsyn till tonart."""
+    def make_template(root, quality):
+        t = np.zeros(12)
+        intervals = [0, 4, 7] if quality == 'maj' else [0, 3, 7]
+        for i in intervals:
+            t[(root + i) % 12] = 1.0
+        return t
+
+    templates = {(r, q): make_template(r, q) for r in range(12) for q in ('maj', 'min')}
+    frames = chroma_frames.T
+    frames = frames / (np.linalg.norm(frames, axis=1, keepdims=True) + 1e-8)
+
+    chord_votes = {}
+    for (root, quality), tmpl in templates.items():
+        tmpl_norm = tmpl / (np.linalg.norm(tmpl) + 1e-8)
+        chord_votes[(root, quality)] = float((frames @ tmpl_norm).mean())
+
+    top4 = sorted(chord_votes.items(), key=lambda x: -x[1])[:4]
+    chord_list = []
+    for (root, quality), score in top4:
+        interval = (root - key_idx) % 12
+        chord_list.append({
+            "chord": KEYS[root] + ("m" if quality == 'min' else ""),
+            "function": NUMERAL.get(interval, "?"),
+            "score": round(score, 3)
+        })
+
+    intervals = [(c[0] - key_idx) % 12 for c, _ in top4]
+
+    MINOR_PROGRESSIONS = {
+        "i-iv-VII-III": [0, 5, 10, 3],
+        "i-VII-VI-V":   [0, 10, 9, 7],
+        "i-VII-iv-III": [0, 10, 5, 3],
+        "i-VI-III-VII": [0, 9, 3, 10],
+        "i-iv-v":       [0, 5, 7],
+    }
+    progressions = COMMON_PROGRESSIONS if is_major else MINOR_PROGRESSIONS
+    best, best_score = list(progressions.keys())[0], 0
+    for name, pattern in progressions.items():
         score = sum(1 for p in pattern if p in intervals)
         if score > best_score:
             best_score, best = score, name
-    chords = [{"chord": KEYS[(key_idx+i)%12], "function": NUMERAL.get(i,"?")} for i in intervals]
-    return best, " — ".join(NUMERAL.get(i,"?") for i in intervals), chords
+
+    def numeral(i):
+        n = NUMERAL.get(i, "?")
+        if not is_major and n in ["I", "IV", "V"]:
+            return n.lower()
+        return n
+
+    funcs = " — ".join(numeral(i) for i in intervals)
+    return best, funcs, chord_list
 
 
 def _structure(full_duration: float, bpm: float) -> list:
@@ -113,10 +160,14 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     full_duration = _get_full_duration(raw_bytes)
     log.info("duration_detected", full_duration=round(full_duration, 2) if full_duration else "unknown")
 
-    # ── Pass 2: load analysis window ──────────────────────────────────────
+    # ── Pass 2: load analysis window (SR=16000 för MFCC/spectral) ────────
     buf = io.BytesIO(raw_bytes)
     y, sr = librosa.load(buf, sr=SR, mono=True, duration=ANALYSIS_DUR)
     analysis_duration = len(y) / sr
+
+    # ── Pass 2b: load 30 sek vid SR=22050 för BPM + key/chord ─────────────
+    buf_key = io.BytesIO(raw_bytes)
+    y_key, sr_key = librosa.load(buf_key, sr=SR_KEY, mono=True, duration=30)
 
     # If soundfile failed (e.g. MP3 edge case), fall back to librosa's duration
     if full_duration is None:
@@ -127,34 +178,46 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
 
     f: dict[str, Any] = {}
 
-    # BPM — använder y_key (SR=22050) för bättre kick-detektering i elektronisk musik
-    hop_bpm = 512  # mindre hop för bättre tidsupplösning vid BPM
+    # BPM — använder SR=22050 för bättre kick-detektering
+    hop_bpm = 512
     onset_env_bpm = librosa.onset.onset_strength(y=y_key, sr=sr_key, hop_length=hop_bpm)
     tempo, beats = librosa.beat.beat_track(y=y_key, sr=sr_key, hop_length=hop_bpm, onset_envelope=onset_env_bpm)
     beat_track_bpm = float(np.squeeze(tempo))
     try:
         tempo_arr = librosa.feature.rhythm.tempo(onset_envelope=onset_env_bpm, sr=sr_key, hop_length=hop_bpm, aggregate=None)
         bpm_val = float(np.median(tempo_arr))
-        log.info("bpm_detected", bpm=round(bpm_val,1), beat_track_bpm=round(beat_track_bpm,1), method="rhythm_tempo_22050")
+        log.info("bpm_detected", bpm=round(bpm_val,1), beat_track_bpm=round(beat_track_bpm,1))
     except Exception as e:
         bpm_val = beat_track_bpm
         log.warning("bpm_fallback", error=str(e), bpm=round(bpm_val,1))
     f["bpm"]        = round(bpm_val, 1)
     f["beat_count"] = int(len(beats))
 
-    # Key / Camelot
-    chroma      = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LEN)
-    chroma_mean = chroma.mean(axis=1)
+    # Key / Camelot — SR=22050 + chroma_cqt + tuning-kompensation
+    try:
+        tuning = float(librosa.estimate_tuning(y=y_key, sr=sr_key))
+        log.info("tuning_estimated", tuning_cents=round(tuning*100, 1))
+    except Exception as e:
+        tuning = 0.0
+        log.warning("tuning_fallback", error=str(e))
+    chroma_cqt  = librosa.feature.chroma_cqt(
+        y=y_key, sr=sr_key,
+        bins_per_octave=36, hop_length=HOP_LEN,
+        fmin=librosa.note_to_hz('C1'), tuning=tuning,
+    )
+    chroma_cens = librosa.feature.chroma_cens(C=chroma_cqt, bins_per_octave=36)
+    chroma_mean = chroma_cens.mean(axis=1)
     key_idx, is_major, key_conf = _detect_key(chroma_mean)
     f["key"]            = KEYS[key_idx]
     f["scale"]          = "major" if is_major else "minor"
     f["key_confidence"] = key_conf
     f["camelot"]        = CAMELOT.get((key_idx, is_major), "?")
 
-    # MFCC + Chroma stats
+    # MFCC + Chroma stats (SR=16000 för feature_vector — konsistent med träning)
+    chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=N_FFT, hop_length=HOP_LEN)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LEN)
     f["mfcc_stats"]   = {"mean": mfcc.mean(axis=1).tolist(), "std": mfcc.std(axis=1).tolist()}
-    f["chroma_stats"] = {"mean": chroma_mean.tolist(),       "std": chroma.std(axis=1).tolist()}
+    f["chroma_stats"] = {"mean": chroma_stft.mean(axis=1).tolist(), "std": chroma_stft.std(axis=1).tolist()}
 
     # Spectral
     f["spectral_centroid_mean"]  = round(float(librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=HOP_LEN).mean()), 2)
@@ -193,7 +256,7 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     f["groove_feel"]         = "swung" if f["swing_ratio"] > 1.15 else "straight" if f["swing_ratio"] < 0.9 else "even"
 
     # Chords
-    prog, funcs, chords = _chords(chroma_mean, key_idx)
+    prog, funcs, chords = _chords(chroma_cens, key_idx, is_major)
     f["chord_progression"]  = prog
     f["harmonic_functions"] = funcs
     f["chords"]             = chords
