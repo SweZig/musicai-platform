@@ -167,7 +167,7 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
 
     # ── Pass 2b: load 30 sek vid SR=22050 för BPM + key/chord ─────────────
     buf_key = io.BytesIO(raw_bytes)
-    y_key, sr_key = librosa.load(buf_key, sr=SR_KEY, mono=True, duration=30)
+    y_key, sr_key = librosa.load(buf_key, sr=SR_KEY, mono=True, duration=60)
 
     # If soundfile failed (e.g. MP3 edge case), fall back to librosa's duration
     if full_duration is None:
