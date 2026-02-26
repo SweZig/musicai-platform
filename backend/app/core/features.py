@@ -127,18 +127,18 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
 
     f: dict[str, Any] = {}
 
-    # BPM — använder onset_strength för stabilare tempo-estimering
-    onset_env_bpm = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP_LEN)
-    tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LEN, onset_envelope=onset_env_bpm)
+    # BPM — använder y_key (SR=22050) för bättre kick-detektering i elektronisk musik
+    hop_bpm = 512  # mindre hop för bättre tidsupplösning vid BPM
+    onset_env_bpm = librosa.onset.onset_strength(y=y_key, sr=sr_key, hop_length=hop_bpm)
+    tempo, beats = librosa.beat.beat_track(y=y_key, sr=sr_key, hop_length=hop_bpm, onset_envelope=onset_env_bpm)
     beat_track_bpm = float(np.squeeze(tempo))
-    # Prova librosa.feature.rhythm.tempo (librosa >= 0.10) för lokala estimates
     try:
-        tempo_arr = librosa.feature.rhythm.tempo(onset_envelope=onset_env_bpm, sr=sr, hop_length=HOP_LEN, aggregate=None)
+        tempo_arr = librosa.feature.rhythm.tempo(onset_envelope=onset_env_bpm, sr=sr_key, hop_length=hop_bpm, aggregate=None)
         bpm_val = float(np.median(tempo_arr))
-        log.info("bpm_from_rhythm_tempo", bpm=round(bpm_val,1), beat_track_bpm=round(beat_track_bpm,1))
+        log.info("bpm_detected", bpm=round(bpm_val,1), beat_track_bpm=round(beat_track_bpm,1), method="rhythm_tempo_22050")
     except Exception as e:
         bpm_val = beat_track_bpm
-        log.warning("bpm_fallback_to_beat_track", error=str(e), bpm=round(bpm_val,1))
+        log.warning("bpm_fallback", error=str(e), bpm=round(bpm_val,1))
     f["bpm"]        = round(bpm_val, 1)
     f["beat_count"] = int(len(beats))
 
