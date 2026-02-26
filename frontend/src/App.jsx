@@ -479,7 +479,7 @@ function SimilarCard({ track, onClick }) {
   )
 }
 
-function TrackDetail({ track, onSelectTrack, onReanalyze, reanalyzing }) {
+function TrackDetail({ track, onSelectTrack, reanalyzing }) {
   const [similar, setSimilar] = useState(null)
   const [loadingSimilar, setLoadingSimilar] = useState(false)
 
@@ -502,13 +502,13 @@ function TrackDetail({ track, onSelectTrack, onReanalyze, reanalyzing }) {
       <div className="detail-header">
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
           <div className="detail-title">{shortName(track.title || track.original_filename)}</div>
-          <button
-            className="reanalyze-btn"
-            onClick={() => onReanalyze(track.id)}
-            disabled={reanalyzing}
+          <label
+            className={"reanalyze-btn" + (reanalyzing ? " disabled" : "")}
+            htmlFor="reanalyze-input"
+            style={{ cursor: reanalyzing ? 'not-allowed' : 'pointer' }}
           >
             {reanalyzing ? <><span className="spinner" /> Analyserar...</> : '↻ Re-analysera'}
-          </button>
+          </label>
         </div>
         <div className="detail-subtitle">
           {track.original_filename} &nbsp;·&nbsp; {fmtDur(track.duration_sec)} &nbsp;·&nbsp;
@@ -697,17 +697,10 @@ export default function App() {
   }
 
   const [reanalyzing, setReanalyzing] = useState(false)
-  const reanalyzeRef = useRef()
-  const reanalyzeTargetRef = useRef(null)  // ref istället för state — ingen re-render
-
-  function handleReanalyze(trackId) {
-    reanalyzeTargetRef.current = trackId   // spara trackId utan re-render
-    reanalyzeRef.current?.click()          // click sker direkt i samma user gesture
-  }
 
   async function handleReanalyzeFile(files) {
     const file = files[0]
-    if (!file || !reanalyzeTargetRef.current) return
+    if (!file) return
     setError('')
     setReanalyzing(true)
     try {
@@ -719,7 +712,6 @@ export default function App() {
       setError('Re-analys misslyckades: ' + e.message)
     } finally {
       setReanalyzing(false)
-      reanalyzeTargetRef.current = null
     }
   }
 
@@ -768,12 +760,13 @@ export default function App() {
                 onChange={e => handleFiles(e.target.files)}
               />
             <input
-              ref={reanalyzeRef}
+              id="reanalyze-input"
               type="file"
               accept=".wav,.mp3,.flac,.aiff,.aif,.ogg"
               onChange={e => handleReanalyzeFile(e.target.files)}
               style={{ display: 'none' }}
             />
+
             </div>
             {uploading && (
               <div>
@@ -823,7 +816,6 @@ export default function App() {
             <TrackDetail
               track={selected}
               onSelectTrack={selectTrack}
-              onReanalyze={handleReanalyze}
               reanalyzing={reanalyzing}
             />
           ) : (
