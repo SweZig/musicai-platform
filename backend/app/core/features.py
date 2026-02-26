@@ -216,25 +216,20 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
         tuning = 0.0
         log.warning("tuning_fallback", error=str(e))
 
-    # Bass-boost: lågpassfilter för att betona basslinjen (viktigast för tonart)
-    # I elektronisk musik är basnoten det primära tonala ankaret
-    from scipy.signal import butter, sosfilt
-    sos = butter(4, 300.0 / (sr_key / 2), btype='low', output='sos')
-    y_bass = sosfilt(sos, y_key)
-    # Blanda original + förstärkt bas (70% orig + 30% extra bas)
-    y_tonal = 0.7 * y_key + 0.3 * (y_bass * 3.0)
-    y_tonal = y_tonal / (np.max(np.abs(y_tonal)) + 1e-8)  # normalisera
-
-    seg_len = len(y_tonal) // 3
+    # Key detection — ren chroma_cqt utan preprocessing, diagnostik-loggning
+    # bins_per_octave=12 är mer stabil än 36 för korrelationsbaserad key-detection
+    seg_len = len(y_key) // 3
     votes: dict[tuple, float] = {}
     for i in range(3):
-        seg = y_tonal[i*seg_len:(i+1)*seg_len]
+        seg = y_key[i*seg_len:(i+1)*seg_len]
         cqt = librosa.feature.chroma_cqt(
             y=seg, sr=sr_key,
-            bins_per_octave=36, hop_length=HOP_LEN,
+            bins_per_octave=12, hop_length=HOP_LEN,
             fmin=librosa.note_to_hz('C1'), tuning=tuning,
+            norm=np.inf,
         )
-        k_idx, k_major, k_conf = _detect_key(cqt.mean(axis=1))
+        chroma_mean_seg = cqt.mean(axis=1)
+        k_idx, k_major, k_conf = _detect_key(chroma_mean_seg)
         key_tuple = (k_idx, k_major)
         votes[key_tuple] = votes.get(key_tuple, 0.0) + k_conf
 
@@ -244,13 +239,18 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     key_conf = round(votes[best_key] / 3, 3)
     log.info("key_votes", votes={f"{KEYS[k]}_{'maj' if m else 'min'}": round(v,3) for (k,m),v in votes.items()})
 
-    # Full chroma för chord-detektering
-    chroma_cqt  = librosa.feature.chroma_cqt(
-        y=y_tonal, sr=sr_key,
-        bins_per_octave=36, hop_length=HOP_LEN,
+    # Logga chroma-profil för diagnostik (vilka noter dominerar)
+    chroma_cqt = librosa.feature.chroma_cqt(
+        y=y_key, sr=sr_key,
+        bins_per_octave=12, hop_length=HOP_LEN,
         fmin=librosa.note_to_hz('C1'), tuning=tuning,
+        norm=np.inf,
     )
-    chroma_cens = librosa.feature.chroma_cens(C=chroma_cqt, bins_per_octave=36)
+    chroma_full_mean = chroma_cqt.mean(axis=1)
+    top3_idx = np.argsort(chroma_full_mean)[::-1][:3]
+    log.info("chroma_top3", notes={KEYS[int(i)]: round(float(chroma_full_mean[i]),3) for i in top3_idx})
+
+    chroma_cens = librosa.feature.chroma_cens(C=chroma_cqt, bins_per_octave=12)
 
     f["key"]            = KEYS[key_idx]
     f["scale"]          = "major" if is_major else "minor"
