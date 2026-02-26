@@ -130,12 +130,15 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     # BPM — använder onset_strength för stabilare tempo-estimering
     onset_env_bpm = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP_LEN)
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LEN, onset_envelope=onset_env_bpm)
+    beat_track_bpm = float(np.squeeze(tempo))
     # Prova librosa.feature.rhythm.tempo (librosa >= 0.10) för lokala estimates
     try:
         tempo_arr = librosa.feature.rhythm.tempo(onset_envelope=onset_env_bpm, sr=sr, hop_length=HOP_LEN, aggregate=None)
         bpm_val = float(np.median(tempo_arr))
-    except Exception:
-        bpm_val = float(np.squeeze(tempo))
+        log.info("bpm_from_rhythm_tempo", bpm=round(bpm_val,1), beat_track_bpm=round(beat_track_bpm,1))
+    except Exception as e:
+        bpm_val = beat_track_bpm
+        log.warning("bpm_fallback_to_beat_track", error=str(e), bpm=round(bpm_val,1))
     f["bpm"]        = round(bpm_val, 1)
     f["beat_count"] = int(len(beats))
 
