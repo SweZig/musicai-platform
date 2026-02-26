@@ -698,16 +698,16 @@ export default function App() {
 
   const [reanalyzing, setReanalyzing] = useState(false)
   const reanalyzeRef = useRef()
-  const [reanalyzeTargetId, setReanalyzeTargetId] = useState(null)
+  const reanalyzeTargetRef = useRef(null)  // ref istället för state — ingen re-render
 
-  async function handleReanalyze(trackId) {
-    setReanalyzeTargetId(trackId)
-    reanalyzeRef.current?.click()
+  function handleReanalyze(trackId) {
+    reanalyzeTargetRef.current = trackId   // spara trackId utan re-render
+    reanalyzeRef.current?.click()          // click sker direkt i samma user gesture
   }
 
   async function handleReanalyzeFile(files) {
     const file = files[0]
-    if (!file || !reanalyzeTargetId) return
+    if (!file || !reanalyzeTargetRef.current) return
     setError('')
     setReanalyzing(true)
     try {
@@ -719,7 +719,7 @@ export default function App() {
       setError('Re-analys misslyckades: ' + e.message)
     } finally {
       setReanalyzing(false)
-      setReanalyzeTargetId(null)
+      reanalyzeTargetRef.current = null
     }
   }
 
@@ -824,7 +824,7 @@ export default function App() {
               track={selected}
               onSelectTrack={selectTrack}
               onReanalyze={handleReanalyze}
-              reanalyzing={reanalyzing && reanalyzeTargetId === selected?.id}
+              reanalyzing={reanalyzing}
             />
           ) : (
             <div className="empty-state">
