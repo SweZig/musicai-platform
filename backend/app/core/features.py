@@ -373,6 +373,21 @@ def _combine_key_estimates(
     sorted_s = np.sort(scores)[::-1]
     margin   = float((sorted_s[0] - sorted_s[1]) / (sorted_s[0] + 1e-8))
 
+    # Tie-breaker: when ensemble margin < 0.15 AND chroma cosine < 0.90
+    # (indicating the chroma signal is ambiguous), and harmonic disagrees with
+    # the current winner, override with harmonic.
+    # Guard: chroma_result[2] >= 0.90 → chroma is authoritative, do NOT override.
+    # Rationale: chroma cosine suffers from semitone bleed (F vs F# adjacent bins),
+    # causing E_min to beat A_min even when F natural is present (F∈A_min, F∉E_min).
+    # Harmonic chord analysis is immune to single-semitone bleed.
+    chroma_cosine = chroma_result[2]
+    if margin < 0.15 and chroma_cosine < 0.90 and harmonic_result is not None:
+        hk, hm = harmonic_result[0], harmonic_result[1]
+        if (hk != key_result) or (hm != is_major_result):
+            key_result      = hk
+            is_major_result = hm
+            margin          = 0.0  # signals forced tie-break
+
     return key_result, is_major_result, round(margin, 3)
 
 
