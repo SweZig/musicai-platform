@@ -165,9 +165,11 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
     y, sr = librosa.load(buf, sr=SR, mono=True, duration=ANALYSIS_DUR)
     analysis_duration = len(y) / sr
 
-    # ── Pass 2b: load 30 sek vid SR=22050 för BPM + key/chord ─────────────
+    # ── Pass 2b: load 60 sek vid SR=22050, hoppar 10 sek intro ───────────
     buf_key = io.BytesIO(raw_bytes)
-    y_key, sr_key = librosa.load(buf_key, sr=SR_KEY, mono=True, duration=60)
+    intro_skip = 10.0 if (full_duration or 0) > 30 else 0.0
+    y_key, sr_key = librosa.load(buf_key, sr=SR_KEY, mono=True,
+                                  offset=intro_skip, duration=60)
 
     # If soundfile failed (e.g. MP3 edge case), fall back to librosa's duration
     if full_duration is None:
@@ -178,36 +180,70 @@ def extract(raw_bytes: bytes, filename: str = "audio") -> dict[str, Any]:
 
     f: dict[str, Any] = {}
 
-    # BPM — använder SR=22050 för bättre kick-detektering
+    # BPM — hoppar 10 sek intro, analyserar 50 sek vid SR=22050
     hop_bpm = 512
-    onset_env_bpm = librosa.onset.onset_strength(y=y_key, sr=sr_key, hop_length=hop_bpm)
-    tempo, beats = librosa.beat.beat_track(y=y_key, sr=sr_key, hop_length=hop_bpm, onset_envelope=onset_env_bpm)
+    skip_sec = 10
+    skip_samples = skip_sec * sr_key
+    y_bpm = y_key[skip_samples:] if len(y_key) > skip_samples * 2 else y_key
+    onset_env_bpm = librosa.onset.onset_strength(y=y_bpm, sr=sr_key, hop_length=hop_bpm)
+    # Testa tre startpunkter för BPM och ta median
+    bpm_candidates = []
+    for start_bpm in [90, 110, 130]:
+        t, b = librosa.beat.beat_track(y=y_bpm, sr=sr_key, hop_length=hop_bpm,
+                                        onset_envelope=onset_env_bpm, start_bpm=start_bpm)
+        bpm_candidates.append(float(np.squeeze(t)))
+    tempo, beats = librosa.beat.beat_track(y=y_bpm, sr=sr_key, hop_length=hop_bpm,
+                                            onset_envelope=onset_env_bpm)
     beat_track_bpm = float(np.squeeze(tempo))
     try:
-        tempo_arr = librosa.feature.rhythm.tempo(onset_envelope=onset_env_bpm, sr=sr_key, hop_length=hop_bpm, aggregate=None)
-        bpm_val = float(np.median(tempo_arr))
-        log.info("bpm_detected", bpm=round(bpm_val,1), beat_track_bpm=round(beat_track_bpm,1))
-    except Exception as e:
-        bpm_val = beat_track_bpm
-        log.warning("bpm_fallback", error=str(e), bpm=round(bpm_val,1))
+        tempo_arr = librosa.feature.rhythm.tempo(onset_envelope=onset_env_bpm, sr=sr_key,
+                                                  hop_length=hop_bpm, aggregate=None)
+        bpm_candidates.append(float(np.median(tempo_arr)))
+    except Exception:
+        pass
+    # Kluster-median: välj BPM-kandidat närmast medianen
+    bpm_val = float(np.median(bpm_candidates)) if bpm_candidates else beat_track_bpm
+    log.info("bpm_detected", bpm=round(bpm_val,1), candidates=[round(b,1) for b in bpm_candidates])
     f["bpm"]        = round(bpm_val, 1)
     f["beat_count"] = int(len(beats))
 
-    # Key / Camelot — SR=22050 + chroma_cqt + tuning-kompensation
+    # Key / Camelot — multi-segment voting för robust tonart-detektering
+    # Delar upp y_key i 3 segment och röstar fram vinnande tonart
     try:
         tuning = float(librosa.estimate_tuning(y=y_key, sr=sr_key))
         log.info("tuning_estimated", tuning_cents=round(tuning*100, 1))
     except Exception as e:
         tuning = 0.0
         log.warning("tuning_fallback", error=str(e))
+
+    seg_len = len(y_key) // 3
+    votes: dict[tuple, float] = {}
+    for i in range(3):
+        seg = y_key[i*seg_len:(i+1)*seg_len]
+        cqt = librosa.feature.chroma_cqt(
+            y=seg, sr=sr_key,
+            bins_per_octave=36, hop_length=HOP_LEN,
+            fmin=librosa.note_to_hz('C1'), tuning=tuning,
+        )
+        cens = librosa.feature.chroma_cens(C=cqt, bins_per_octave=36)
+        k_idx, k_major, k_conf = _detect_key(cens.mean(axis=1))
+        key_tuple = (k_idx, k_major)
+        votes[key_tuple] = votes.get(key_tuple, 0.0) + k_conf
+
+    # Välj tonart med högst samlad confidence
+    best_key = max(votes, key=lambda t: votes[t])
+    key_idx, is_major = best_key
+    key_conf = round(votes[best_key] / 3, 3)
+    log.info("key_votes", votes={f"{KEYS[k]}_{'maj' if m else 'min'}": round(v,3) for (k,m),v in votes.items()})
+
+    # Fallback: full chroma om bara ett segment vann
     chroma_cqt  = librosa.feature.chroma_cqt(
         y=y_key, sr=sr_key,
         bins_per_octave=36, hop_length=HOP_LEN,
         fmin=librosa.note_to_hz('C1'), tuning=tuning,
     )
     chroma_cens = librosa.feature.chroma_cens(C=chroma_cqt, bins_per_octave=36)
-    chroma_mean = chroma_cens.mean(axis=1)
-    key_idx, is_major, key_conf = _detect_key(chroma_mean)
+
     f["key"]            = KEYS[key_idx]
     f["scale"]          = "major" if is_major else "minor"
     f["key_confidence"] = key_conf
